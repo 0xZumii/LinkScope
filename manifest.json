@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Link Preview Sandbox",
+  "version": "0.1.0",
+  "description": "Hover a link to preview it in a sandboxed, script-free frame and inspect the redirect chain before you click.",
+  "minimum_chrome_version": "114",
+  "permissions": ["storage", "webRequest"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Link Preview Sandbox"
+  }
+}

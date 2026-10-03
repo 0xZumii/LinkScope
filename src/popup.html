@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Link Preview Sandbox</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        width: 300px;
+        padding: 14px;
+        background: #12151c;
+        color: #e7ebf3;
+        font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      h1 { margin: 0 0 12px; font-size: 14px; }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; }
+      .row label { color: #c3ccdc; }
+      .row .hint { display: block; font-size: 11px; color: #6d7789; }
+      select, input[type="number"] {
+        font: inherit;
+        color: #e7ebf3;
+        background: #1c222e;
+        border: 1px solid #303848;
+        border-radius: 7px;
+        padding: 4px 6px;
+      }
+      input[type="range"] { width: 130px; accent-color: #4f9d74; }
+      .switch { position: relative; width: 40px; height: 22px; }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .slider {
+        position: absolute; inset: 0;
+        background: #333c4e; border-radius: 999px; transition: .15s;
+      }
+      .slider::before {
+        content: ""; position: absolute; height: 16px; width: 16px;
+        left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s;
+      }
+      input:checked + .slider { background: #3f8a63; }
+      input:checked + .slider::before { transform: translateX(18px); }
+      .footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid #262d3d; }
+      .footer a { color: #6fd3a3; text-decoration: none; font-size: 12px; }
+      .muted { color: #6d7789; font-size: 11px; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Link Preview Sandbox</h1>
+
+    <div class="row">
+      <label for="enabled">Enabled</label>
+      <span class="switch">
+        <input type="checkbox" id="enabled" />
+        <span class="slider"></span>
+      </span>
+    </div>
+
+    <div class="row">
+      <label for="mode">
+        Trigger
+        <span class="hint">How a preview opens</span>
+      </label>
+      <select id="mode">
+        <option value="shift">Shift + hover</option>
+        <option value="delay">Hover delay</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <label for="delayMs">
+        Hover delay
+        <span class="hint"><span id="delayValue">600</span> ms</span>
+      </label>
+      <input type="range" id="delayMs" min="150" max="2000" step="50" />
+    </div>
+
+    <div class="row">
+      <label for="fetchPreview">
+        Render page preview
+        <span class="hint">Sandboxed, scripts disabled</span>
+      </label>
+      <span class="switch">
+        <input type="checkbox" id="fetchPreview" />
+        <span class="slider"></span>
+      </span>
+    </div>
+
+    <div class="footer">
+      <a href="#" id="reset">Reset to defaults</a>
+      <div class="muted">Changes apply to open tabs immediately.</div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
