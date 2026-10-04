@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Repository: https://github.com/0xZumii/LinkScope
 
+## [0.9.1] - 2026-10-04
+
+### Changed
+
+- Redrew the logo/icon: a single bold chain link inside a crosshair reticle
+  (previously two offset links that read as overlapping circles at small sizes).
+  Regenerated `icon-16/32/48/128.png`; the mark is legible down to 16px.
+
 ## [0.9.0] - 2026-10-04
 
 ### Added

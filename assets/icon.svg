@@ -3,19 +3,19 @@
 
   <rect width="128" height="128" rx="28" fill="#12151c"/>
 
-  <!-- Reticle brackets -->
-  <g fill="none" stroke="#6fd3a3" stroke-width="9" stroke-linecap="round" opacity="0.85">
-    <path d="M30 46 V38 a8 8 0 0 1 8-8 h8"/>
-    <path d="M82 30 h8 a8 8 0 0 1 8 8 v8"/>
-    <path d="M98 82 v8 a8 8 0 0 1-8 8 h-8"/>
-    <path d="M46 98 h-8 a8 8 0 0 1-8-8 v-8"/>
+  <!-- Crosshair ticks -->
+  <g stroke="#6fd3a3" stroke-width="5" stroke-linecap="round" opacity="0.6">
+    <line x1="64" y1="20" x2="64" y2="36"/>
+    <line x1="64" y1="92" x2="64" y2="108"/>
+    <line x1="20" y1="64" x2="36" y2="64"/>
+    <line x1="92" y1="64" x2="108" y2="64"/>
   </g>
 
-  <!-- Single chain link, rotated 45deg, centered -->
-  <rect x="40" y="40" width="48" height="48" rx="24"
-        transform="rotate(45 64 64)"
-        fill="none" stroke="#6fd3a3" stroke-width="10"/>
+  <!-- Reticle ring -->
+  <circle cx="64" cy="64" r="39" fill="none" stroke="#6fd3a3" stroke-width="4.5" opacity="0.4"/>
 
-  <!-- Focal dot -->
-  <circle cx="64" cy="64" r="7" fill="#a9e8c6"/>
+  <!-- The link -->
+  <rect x="37" y="49" width="54" height="30" rx="15"
+        transform="rotate(45 64 64)"
+        fill="none" stroke="#6fd3a3" stroke-width="8.5" stroke-linejoin="round"/>
 </svg>

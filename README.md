@@ -210,9 +210,9 @@ Version history is in `CHANGELOG.md`.
 
 ## Branding
 
-The mark is a **viewfinder reticle around a chain link / aperture** — the link
-represents the URL being inspected, the reticle represents scoping it out before
-you commit. Palette:
+The mark is a **single chain link inside a crosshair reticle** — the link
+represents the URL being inspected, the crosshair represents scoping it out
+before you commit. Palette:
 
 | Role | Hex |
 | --- | --- |
