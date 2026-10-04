@@ -63,11 +63,20 @@ there is real content to show, and only then per-site memory:
 
 ### The preview window
 
-The preview opens next to the hovered link as a floating window (780px wide, or
+The preview opens centered in the viewport as a floating window (920px wide, or
 as large as the viewport allows). Once open it stays put: moving the pointer away
 **does not** close it, and neither does scrolling. It opens once and then stays
 where it is, so hovering a second link loads its preview into the same window at
-the same spot. Drag it anywhere by the header. Close it with the **✕** button or
+the same spot. Drag it anywhere by its header. Close it with the **✕** button or
+**Esc**.
+
+### The preview window
+
+The preview opens centered in the viewport as a floating window (920px wide, or
+as large as the viewport allows). Once open it stays put: moving the pointer away
+**does not** close it, and neither does scrolling. It opens once and then stays
+where it is, so hovering a second link loads its preview into the same window at
+the same spot. Drag it anywhere by its header. Close it with the **✕** button or
 **Esc**. (This replaced the old behavior where the panel hid as soon as the
 pointer left the link.)
 

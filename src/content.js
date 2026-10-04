@@ -29,7 +29,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.8.0+window';
+  const BUILD = 'v0.8.1+drag';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -201,6 +201,7 @@
 
     (document.body || document.documentElement).appendChild(host);
     wirePanelEvents();
+    attachDrag(panel.querySelector('.header'));
   }
 
   function destroyOverlay() {
@@ -212,10 +213,9 @@
     drag = null;
   }
 
-  // Position the preview window once, near the link, then leave it alone — the
+  // Position the preview centered in the viewport, then leave it alone — the
   // user can drag it anywhere and it stays until dismissed.
   function placePanel(link) {
-    const rect = link.el.getBoundingClientRect();
     const margin = 10;
 
     // Measure while laid out but invisible, so the fit test uses real sizes.
@@ -226,15 +226,11 @@
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    let left = Math.min(Math.max(rect.left, margin), Math.max(margin, vw - width - margin));
-    let top = rect.bottom + margin;
-    if (top + height > vh - margin) {
-      const above = rect.top - margin - height;
-      top = above > margin ? above : Math.max(margin, vh - height - margin);
-    }
+    const left = Math.max(margin, Math.round((vw - width) / 2));
+    const top = Math.max(margin, Math.round((vh - height) / 2));
 
-    panel.style.left = `${Math.round(left)}px`;
-    panel.style.top = `${Math.round(top)}px`;
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
     panel.classList.remove('measuring');
   }
 
@@ -954,27 +950,26 @@
 
   document.addEventListener('mousemove', onPointerMove, { passive: true, capture: true });
 
-  // Drag the preview window by its header. The window is fixed, so a
-  // position:fixed child of the host can't be used as a "ghost" — we read the
-  // pointer's client coords directly instead.
-  document.addEventListener('pointerdown', (e) => {
-    if (!panel || panel.hasAttribute('hidden')) return;
-    const path = e.composedPath?.() || [];
-    const header = path.find((n) => n instanceof Element && n.classList?.contains('header'));
-    if (!header) return;
-    if (path.some((n) => n instanceof Element && n.closest?.('.actions'))) return; // buttons/links
-    if (e.button !== 0) return; // left button only
-
-    const rect = panel.getBoundingClientRect();
-    drag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, moved: false };
-    e.preventDefault();
-    window.addEventListener('pointermove', onDragMove, true);
-    window.addEventListener('pointerup', endDrag, true);
-  }, true);
+  // Drag the preview window by any empty part of the header. Because the shadow
+  // root is CLOSED, `composedPath()` only ever exposes the host element (shadow
+  // nodes are retargeted away), so we can't test for `.header` that way. Instead
+  // the header owns these listeners directly — events inside the shadow tree
+  // compose out to them — and the interactive controls opt out.
+  function attachDrag(handle) {
+    handle.addEventListener('pointerdown', (e) => {
+      if (!panel || e.button !== 0) return;
+      if (e.target?.closest?.('.actions')) return; // buttons/links stay clickable
+      const rect = panel.getBoundingClientRect();
+      drag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+      e.preventDefault();
+      e.stopPropagation();
+      window.addEventListener('pointermove', onDragMove, true);
+      window.addEventListener('pointerup', endDrag, true);
+    });
+  }
 
   function onDragMove(e) {
     if (!drag || !panel) return;
-    drag.moved = true;
     const w = panel.offsetWidth;
     const h = panel.offsetHeight;
     const x = e.clientX - drag.dx;
@@ -1042,7 +1037,7 @@
     * { box-sizing: border-box; }
     .panel {
       position: fixed;
-      width: 780px;
+      width: 920px;
       max-width: calc(100vw - 20px);
       max-height: calc(100vh - 20px);
       display: flex;
@@ -1060,6 +1055,7 @@
     /* Laid out for measurement, but invisible. */
     .panel.measuring { visibility: hidden; pointer-events: none; }
     .header {
+      flex: none;
       display: flex;
       align-items: flex-start;
       gap: 8px;
@@ -1071,7 +1067,6 @@
       touch-action: none;
     }
     .header:active { cursor: grabbing; }
-    .header .titles, .header .verdict, .header .actions { cursor: default; }
     .titles { min-width: 0; flex: 1; }
     .title {
       font-weight: 600;
@@ -1081,7 +1076,7 @@
       text-overflow: ellipsis;
     }
     .requested, .final {
-      font-size: 11.5px;
+      font-size: 12.5px;
       color: #8b96ab;
       white-space: nowrap;
       overflow: hidden;
@@ -1115,10 +1110,10 @@
     }
     .actions button:hover, .actions a:hover { background: #2b3446; }
     .actions button.active { background: #2f4a3a; border-color: #3f6b52; color: #a9e8c6; }
-    .section { padding: 9px 12px; border-bottom: 1px solid #202634; }
+    .section { padding: 10px 14px; border-bottom: 1px solid #202634; }
     .section:last-child { border-bottom: none; }
     .section-label {
-      font-size: 10px;
+      font-size: 10.5px;
       letter-spacing: .09em;
       text-transform: uppercase;
       color: #6d7789;
@@ -1166,8 +1161,8 @@
       color: #f0c15c;
     }
     .hop-tag.bad { background: #3a1c1c; color: #f08c8c; }
-    .body-section { padding-bottom: 10px; }
-    .body { height: 430px; max-height: 58vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
+    .body-section { padding-bottom: 10px; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+    .body { flex: 1 1 auto; min-height: 0; height: 440px; max-height: 62vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
     .frame-wrap { position: relative; height: 100%; min-height: 300px; }
     .shot-wrap {
       position: relative;
@@ -1220,7 +1215,7 @@
       text-align: center;
       color: #7f8a9e;
     }
-    .note { font-size: 11px; color: #6d7789; padding: 6px 2px; }
+    .note { font-size: 12.5px; line-height: 1.5; color: #9aa6b8; padding: 8px 2px; }
   `;
 
   // Expose a tiny test hook for manual debugging in the console.

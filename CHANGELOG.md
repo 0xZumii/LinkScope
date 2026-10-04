@@ -5,6 +5,26 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-10-04
+
+### Fixed
+
+- **Dragging now works.** The drag listener tested `composedPath()` for the
+  header, but the overlay uses a *closed* shadow root, so shadow nodes are
+  retargeted to the host and the header was never matched (clicks also leaked
+  through to the page). The header now owns the drag listeners directly and the
+  Copy/Open/✕ controls opt out.
+- The window opens **centered** in the viewport instead of locking to the bottom
+  of the screen.
+
+### Changed
+
+- Wider window (920px), and the preview body now flexes to fill the available
+  height.
+- The note/warning text under the preview was small and low-contrast; it is now
+  larger and lighter (`12.5px`, brighter grey), and the URL line in the header
+  is larger too.
+
 ## [0.8.0] - 2026-10-04
 
 ### Changed
