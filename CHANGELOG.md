@@ -5,7 +5,20 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.1] - 2026-10-04
+
+### Fixed
+
+- Empty summary cards on client-rendered and interstitial pages (X, `t.co`,
+  Telegram invites). A page `<title>` that is just the URL no longer counts as
+  metadata, so these pages now fall through to the screenshot fallback instead
+  of rendering a card with nothing in it.
+- Per-site memory could pin a host to an empty card. A remembered "card" is now
+  reused only while real metadata still exists, and "screenshot" is cached only
+  after a capture actually succeeds. The memory format was bumped so stale
+  entries are discarded on upgrade.
+
+## [0.5.0] - 2026-10-04
 
 ### Added
 

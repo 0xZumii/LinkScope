@@ -24,10 +24,10 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.5.0+memory';
+  const BUILD = 'v0.5.1+meta';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
-  const RENDER_MEMORY_VERSION = 2; // bumped when the key format changes
+  const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
   const MAX_MEMORY_HOSTS = 500;
 
   let settings = { ...DEFAULTS };
@@ -415,7 +415,7 @@
     // and a page with plenty of readable HTML always renders as a frame: a
     // remembered card/shot must not hide content we can actually show.
     const MIN_READABLE = 200;
-    const hasMeta = Boolean(meta.title || meta.description || meta.image);
+    const hasMeta = hasUsableMeta(meta);
     const isLogin = looksLikeLogin(result.html);
 
     // What the current signals suggest, ignoring memory.
@@ -424,12 +424,13 @@
     else mode = hasMeta ? 'card' : 'shot';
 
     // In the ambiguous low-content case, prefer whatever worked for this host
-    // last time. This is what stops a page that photographs better than it
-    // summarises from being re-guessed as a card on every hover (and vice
-    // versa). 'frame'/'block' are deliberately not consulted here.
+    // last time. A remembered screenshot is always safe; a remembered card is
+    // only honoured when there is still real metadata to fill it — otherwise we
+    // would recreate an empty card and never fall through to the screenshot.
     if (mode !== 'frame') {
       const remembered = modeForHost(host);
-      if (remembered === 'card' || remembered === 'shot') mode = remembered;
+      if (remembered === 'shot') mode = 'shot';
+      else if (remembered === 'card' && hasMeta) mode = 'card';
     }
 
     if (mode === 'card') {
@@ -443,7 +444,8 @@
     }
 
     if (mode === 'shot') {
-      rememberMode(host, 'shot');
+      // Remembered only once the capture actually succeeds (see
+      // renderScreenshotFallback) so a failed screenshot isn't cached.
       renderScreenshotFallback(finalUrl, result.status);
       return;
     }
@@ -698,6 +700,23 @@
     return meta;
   }
 
+  // A <title> only makes a useful card when it is actually a title. Many
+  // client-rendered and interstitial pages (X, t.co, Telegram invites) set
+  // <title> to the URL itself; treating that as metadata produced an empty card
+  // and suppressed the screenshot fallback.
+  function looksLikeUrl(text) {
+    const t = (text || '').trim();
+    if (!t) return true;
+    if (/^https?:\/\//i.test(t)) return true;
+    // bare host or host/path, e.g. "example.com" or "t.co/bgcgocFkNp"
+    return /^[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/i.test(t);
+  }
+
+  function hasUsableMeta(meta) {
+    if (meta.image || meta.description) return true;
+    return Boolean(meta.title) && !looksLikeUrl(meta.title);
+  }
+
   // Identify interstitial bot-challenge / block pages. These return 4xx with a
   // short, script-driven page and no useful metadata, so they would otherwise
   // render as a blank frame or an empty card.
@@ -821,6 +840,9 @@
     wrap.append(img);
     wrap.append(el('div', { class: 'frame-badge' }, 'Screenshot'));
     body.append(wrap, note('Captured in a background tab and then closed. This is how the page looks, not a live view.'));
+
+    // Only now that the capture worked do we cache "screenshot" for this host.
+    rememberMode(memoryKey(shot.finalUrl || finalUrl), 'shot');
   }
 
   // --- formatting ----------------------------------------------------------

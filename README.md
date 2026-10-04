@@ -75,9 +75,11 @@ content-length threshold.
 
 Hard signals are never overridden: a bot wall or a sign-in form is always
 detected fresh, and a page with plenty of readable HTML always frames — a stale
-"card" memory can't hide content that is actually there. Memory lives in
-`chrome.storage.local`, is capped at 500 entries (oldest evicted first), and can
-be cleared from the popup.
+"card" memory can't hide content that is actually there. A remembered card is
+reused only while the page still has real metadata (an image, description, or a
+genuine title), so a page that loses its OpenGraph tags falls through to a
+screenshot rather than an empty card. Memory lives in `chrome.storage.local`, is
+capped at 500 entries (oldest evicted first), and can be cleared from the popup.
 
 ## Install (unpacked)
 
