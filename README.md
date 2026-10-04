@@ -22,6 +22,9 @@ script-free frame, and see the redirect chain before you click.**
 - **Screenshot fallback** — if there is neither renderable HTML nor metadata, the
   page is loaded in a temporary background tab, photographed, and the tab is
   closed. Shows how a JS-heavy page actually looks.
+- **Per-site memory** — remembers whether a host needed a summary card or a
+  screenshot, so a known site renders the same way instead of being re-guessed
+  on every hover. Clearable from the popup.
 - **Bot-wall detection** — Cloudflare-style "Just a moment…" interstitials are
   recognised and explained instead of appearing as a blank frame.
 - **Two trigger modes** — plain `hover` (default) with a configurable delay, or
@@ -32,15 +35,49 @@ script-free frame, and see the redirect chain before you click.**
 
 ## How a link is rendered
 
-LinkScope picks the best available representation, in order:
+The target's HTML is fetched by the background worker and sanitized, then one of
+**four** representations is chosen. Hard signals are checked first, then whether
+there is real content to show, and only then per-site memory:
 
-| Condition | What you see |
-| --- | --- |
-| Page has readable HTML | Sandboxed `iframe` (blob URL, scripts disabled) |
-| Cloudflare / bot wall | "Blocked by a bot check" explanation |
-| JS-rendered, has OpenGraph tags | Summary card (title, description, image) |
-| JS-rendered, no metadata | Screenshot captured in a background tab |
-| Contains a sign-in form | Frame + `PREVIEW` badge + sandbox warning |
+1. **Bot-wall notice.** A Cloudflare-style interstitial ("Just a moment…", an
+   otherwise empty 4xx shell) is recognised and explained instead of being shown
+   as a blank frame.
+2. **Sandboxed frame.** If the page has readable HTML — or looks like a sign-in
+   page — its content renders in an `<iframe sandbox="">` with scripts, forms and
+   frames disabled. Login pages always frame, so the sandbox warning is visible;
+   forms cannot submit and the destination sees nothing you type.
+3. **Summary card.** A client-rendered shell (X, many SPAs) has little readable
+   HTML but usually carries OpenGraph tags. Those become a title + description +
+   image card rather than a blank frame.
+4. **Screenshot.** A shell with no usable metadata is loaded in a temporary
+   background tab, photographed, and the tab closed — so JS-heavy pages still
+   show how they actually look.
+
+### Why a `blob:` URL instead of `srcdoc`
+
+The frame is populated by writing the sanitized HTML to a `blob:` URL and using
+that as the iframe `src`, rather than setting `srcdoc`. A `srcdoc` document is
+created inside the host page's browsing context, so the **host page's CSP applies
+to it** — and a strict policy that blocks third-party assets stops the previewed
+page's own stylesheets, fonts and images from loading, leaving it unstyled or
+blank. A `blob:` URL loads as its own document with its own (empty) CSP, so the
+rewritten absolute asset URLs can load. `srcdoc` is kept only as a fallback for
+when `Blob`/`URL.createObjectURL` is unavailable.
+
+### Per-site memory
+
+The card-vs-screenshot choice is the only genuinely ambiguous one, so that is
+where LinkScope learns. It remembers which of the two worked for each site,
+keyed by **host + first path segment** (so `example.com/blog` and
+`example.com/shop` are distinct, and shared hosts like `github.io` don't
+collide), and reuses it on the next hover instead of re-guessing from a
+content-length threshold.
+
+Hard signals are never overridden: a bot wall or a sign-in form is always
+detected fresh, and a page with plenty of readable HTML always frames — a stale
+"card" memory can't hide content that is actually there. Memory lives in
+`chrome.storage.local`, is capped at 500 entries (oldest evicted first), and can
+be cleared from the popup.
 
 ## Install (unpacked)
 
@@ -59,6 +96,7 @@ Click the toolbar icon to configure:
 | Trigger | Hover | or "Shift + hover" |
 | Hover delay | 500 ms | how long the pointer must rest on a link |
 | Render page preview | on | turn off to only show link + redirects |
+| Remembered sites | — | count of learned hosts; **Clear** forgets them |
 
 ## How the redirect chain is captured
 
@@ -85,15 +123,17 @@ assets/
 src/
   background.js   service worker: webRequest chain capture, capped HTML fetch,
                   background-tab screenshot capture
-  content.js      hover detection, shadow-DOM overlay, sanitizer, sandboxed iframe
-  popup.html/js   settings UI (chrome.storage.sync)
+  content.js      hover detection, shadow-DOM overlay, sanitizer, sandboxed iframe,
+                  per-site render memory
+  popup.html/js   settings UI (chrome.storage.sync); remembered-sites count and
+                  clear action (chrome.storage.local)
 ```
 
 ## Permissions
 
 | Permission | Why |
 | --- | --- |
-| `storage` | remember settings |
+| `storage` | remember settings and per-site render memory |
 | `webRequest` | observe own requests to reconstruct redirect chains |
 | `tabs` | open and close the temporary screenshot tab |
 | `<all_urls>` (host) | fetch a hovered link on any site |
@@ -102,6 +142,16 @@ src/
 fallback) rejects `http://*/*` / `https://*/*` grants and refuses `activeTab`
 (which only applies to a user-invoked tab, not a background one). The extension
 never reads page content beyond the single URL you hover.
+
+## Chrome Web Store
+
+Store-ready copy and policies live in `store/`:
+
+- `store/LISTING.md` — name, summary, detailed description, category.
+- `store/PRIVACY.md` — data handling and per-permission justification.
+- `store/SCREENSHOTS.md` — the 1280×800 screenshot shot list.
+
+Version history is in `CHANGELOG.md`.
 
 ## Branding
 
@@ -138,14 +188,13 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
   "Allow access to file URLs" for the extension.
 - **Client-rendered pages need JavaScript.** Sites like X build their content
   with JS, which the preview disables by design. Where the served HTML is an
-  empty shell, LinkScope falls back to a summary card built from the page's
-  OpenGraph metadata instead of showing a blank frame.
+  empty shell, LinkScope falls back to a metadata card or a background-tab
+  screenshot instead of showing a blank frame.
 - Sites that require login render as a login page (by design — no credentials).
 - `webRequest` is observational only in MV3; that is all this extension needs.
 
 ## Ideas for v2
 
-- Screenshot the preview via `chrome.tabs.captureVisibleTab` in a background tab.
 - Cache previews per URL in `chrome.storage.session`.
 - Show a diff summary of redirect "families" (e.g., link shortener → ad tracker).
 - Opt-in "block this destination" from the preview panel.

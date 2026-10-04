@@ -24,19 +24,85 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.4.0+shot';
+  const BUILD = 'v0.5.0+memory';
+
+  const RENDER_MEMORY_KEY = 'renderMemory';
+  const RENDER_MEMORY_VERSION = 2; // bumped when the key format changes
+  const MAX_MEMORY_HOSTS = 500;
 
   let settings = { ...DEFAULTS };
+  // Per-host render outcomes, learned so we don't re-guess every time.
+  // Shape: { [key]: { mode, at } } where mode is 'frame'|'card'|'shot'|'block'.
+  // `key` is host + first path segment (see memoryKey).
+  let renderMemory = {};
+
+  // Memory key: host + first path segment. Hostname alone is too coarse —
+  // localhost, github.io, medium.com etc. host many very different sites, so a
+  // single entry per host would thrash and mislabel them.
+  function memoryKey(url) {
+    try {
+      const u = new URL(url);
+      const seg = u.pathname.split('/').filter(Boolean)[0] || '';
+      return seg ? `${u.hostname}/${seg}` : u.hostname;
+    } catch {
+      return '';
+    }
+  }
+
+  function rememberMode(key, mode) {
+    if (!key || !isContextAlive()) return;
+    if (renderMemory[key]?.mode === mode) return;
+    renderMemory[key] = { mode, at: Date.now() };
+
+    // Keep the map bounded: drop the oldest entries past the cap.
+    const entries = Object.entries(renderMemory);
+    if (entries.length > MAX_MEMORY_HOSTS) {
+      entries
+        .sort((a, b) => (a[1]?.at || 0) - (b[1]?.at || 0))
+        .slice(0, entries.length - MAX_MEMORY_HOSTS)
+        .forEach(([k]) => delete renderMemory[k]);
+    }
+
+    try {
+      chrome.storage.local.set({
+        [RENDER_MEMORY_KEY]: renderMemory,
+        renderMemoryVersion: RENDER_MEMORY_VERSION,
+      });
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  function modeForHost(key) {
+    return renderMemory[key]?.mode || null;
+  }
+
   try {
     if (isContextAlive()) {
       chrome.storage.sync.get(DEFAULTS, (stored) => {
         if (!isContextAlive()) return;
         settings = { ...DEFAULTS, ...stored };
       });
+      chrome.storage.local.get({ [RENDER_MEMORY_KEY]: {}, renderMemoryVersion: 0 }, (stored) => {
+        if (!isContextAlive()) return;
+        // Discard memory written by an older key format.
+        if (stored?.renderMemoryVersion !== RENDER_MEMORY_VERSION) {
+          renderMemory = {};
+          chrome.storage.local.set({
+            [RENDER_MEMORY_KEY]: {},
+            renderMemoryVersion: RENDER_MEMORY_VERSION,
+          });
+          return;
+        }
+        renderMemory = stored?.[RENDER_MEMORY_KEY] || {};
+      });
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== 'sync') return;
-        for (const [key, change] of Object.entries(changes)) {
-          settings[key] = change.newValue;
+        if (area === 'sync') {
+          for (const [key, change] of Object.entries(changes)) {
+            settings[key] = change.newValue;
+          }
+        } else if (area === 'local' && changes[RENDER_MEMORY_KEY]) {
+          renderMemory = changes[RENDER_MEMORY_KEY].newValue || {};
         }
       });
     }
@@ -320,14 +386,17 @@
 
     const sanitized = sanitizeHtml(result.html, result.finalUrl || requestedUrl);
     const finalUrl = result.finalUrl || requestedUrl;
+    const host = memoryKey(finalUrl);
     const readable = readableLength(sanitized);
     const meta = extractMeta(result.html, finalUrl);
 
     // Bot-challenge / block pages (Cloudflare "Just a moment...", similar) return
     // a 4xx with no useful content and no OpenGraph tags. Surface that clearly
-    // rather than rendering a blank frame or an empty card.
+    // rather than rendering a blank frame or an empty card. This is a hard signal
+    // and always wins over remembered behaviour.
     const challenge = detectChallenge(result, sanitized);
     if (challenge) {
+      rememberMode(host, 'block');
       body.append(
         el('div', { class: 'placeholder' }, challenge.title),
         note(challenge.detail),
@@ -336,16 +405,35 @@
     }
 
     // Client-rendered pages (X, many SPAs) serve an empty shell whose real
-    // content only exists as OpenGraph metadata. Show a metadata card instead of
-    // a blank frame — but only when there is actually metadata to show.
+    // content only exists as OpenGraph metadata or as pixels. When there is
+    // little readable HTML we have a genuine choice between a metadata card and
+    // a screenshot — and that ambiguity is the only place memory changes the
+    // outcome.
     //
-    // Exception: a page that looks like a login prompt should always render as a
-    // frame so the sandbox behaviour (and its warning) is visible, even if it
-    // has little readable text.
+    // Hard signals are never overridden. A login prompt always renders as a
+    // frame (so the sandbox warning is visible), a bot wall was handled above,
+    // and a page with plenty of readable HTML always renders as a frame: a
+    // remembered card/shot must not hide content we can actually show.
     const MIN_READABLE = 200;
     const hasMeta = Boolean(meta.title || meta.description || meta.image);
     const isLogin = looksLikeLogin(result.html);
-    if (readable < MIN_READABLE && hasMeta && !isLogin) {
+
+    // What the current signals suggest, ignoring memory.
+    let mode;
+    if (isLogin || readable >= MIN_READABLE) mode = 'frame';
+    else mode = hasMeta ? 'card' : 'shot';
+
+    // In the ambiguous low-content case, prefer whatever worked for this host
+    // last time. This is what stops a page that photographs better than it
+    // summarises from being re-guessed as a card on every hover (and vice
+    // versa). 'frame'/'block' are deliberately not consulted here.
+    if (mode !== 'frame') {
+      const remembered = modeForHost(host);
+      if (remembered === 'card' || remembered === 'shot') mode = remembered;
+    }
+
+    if (mode === 'card') {
+      rememberMode(host, 'card');
       renderMetaCard(
         meta,
         finalUrl,
@@ -354,13 +442,13 @@
       return;
     }
 
-    // Little content and no metadata: the page is almost certainly
-    // client-rendered. Offer a screenshot of how it actually looks.
-    if (readable < MIN_READABLE) {
+    if (mode === 'shot') {
+      rememberMode(host, 'shot');
       renderScreenshotFallback(finalUrl, result.status);
       return;
     }
 
+    rememberMode(host, 'frame');
     const iframe = document.createElement('iframe');
     iframe.className = 'preview-frame';
     iframe.setAttribute('sandbox', ''); // no scripts, no same-origin, no forms

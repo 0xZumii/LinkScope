@@ -42,6 +42,8 @@
       input:checked + .slider::before { transform: translateX(18px); }
       .footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid #262d3d; }
       .footer a { color: #6fd3a3; text-decoration: none; font-size: 12px; }
+      .linkbtn { color: #6fd3a3; text-decoration: none; font-size: 12px; }
+      .linkbtn:hover { text-decoration: underline; }
       .muted { color: #6d7789; font-size: 11px; margin-top: 6px; }
     </style>
   </head>
@@ -70,7 +72,7 @@
     <div class="row">
       <label for="delayMs">
         Hover delay
-        <span class="hint"><span id="delayValue">600</span> ms</span>
+        <span class="hint"><span id="delayValue">500</span> ms</span>
       </label>
       <input type="range" id="delayMs" min="150" max="2000" step="50" />
     </div>
@@ -84,6 +86,14 @@
         <input type="checkbox" id="fetchPreview" />
         <span class="slider"></span>
       </span>
+    </div>
+
+    <div class="row">
+      <label>
+        Remembered sites
+        <span class="hint" id="memoryCount">0 hosts</span>
+      </label>
+      <a href="#" id="clearMemory" class="linkbtn">Clear</a>
     </div>
 
     <div class="footer">
