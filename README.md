@@ -30,6 +30,9 @@ script-free frame, and see the redirect chain before you click.**
   recognised and explained instead of appearing as a blank frame.
 - **Two trigger modes** — plain `hover` (default) with a configurable delay, or
   `Shift + hover` if you prefer an explicit modifier.
+- **A floating preview window** — the overlay opens near the link, is draggable by
+  its header, and stays put while you scroll or read. Close it with the **✕** or
+  **Esc**.
 - **No credentials for the fetch** — the frame/card paths use
   `credentials: 'omit'`, so they never pull your logged-in session into the
   preview. The screenshot path is the exception (it loads the page live) and is
@@ -57,6 +60,16 @@ there is real content to show, and only then per-site memory:
    so it is configurable (see Privacy): **Isolated** (default) loads it in a
    temporary **Incognito** window so it starts logged out; **Normal tab** uses
    your session; **Off** disables it entirely.
+
+### The preview window
+
+The preview opens next to the hovered link as a floating window (780px wide, or
+as large as the viewport allows). Once open it stays put: moving the pointer away
+**does not** close it, and neither does scrolling. It opens once and then stays
+where it is, so hovering a second link loads its preview into the same window at
+the same spot. Drag it anywhere by the header. Close it with the **✕** button or
+**Esc**. (This replaced the old behavior where the panel hid as soon as the
+pointer left the link.)
 
 ### Privacy: the fetch paths vs. the screenshot path
 

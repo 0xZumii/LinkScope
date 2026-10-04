@@ -5,6 +5,17 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-10-04
+
+### Changed
+
+- The preview is now a **floating window** rather than a hover card. It opens
+  next to the link at roughly double the old size (780px), can be dragged by its
+  header, and **no longer auto-hides** when the pointer moves off it or when the
+  page scrolls. Close it with the ✕ button or Esc. Hovering another link loads
+  into the same window at the same position.
+- Removed the Pin button (redundant once the window stays open on its own).
+
 ## [0.7.0] - 2026-10-04
 
 ### Added

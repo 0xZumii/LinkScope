@@ -18,6 +18,7 @@
     enabled: true,
     mode: 'delay', // 'delay' (plain hover) | 'shift' (Shift + hover)
     delayMs: 500,
+    autoHide: false, // legacy: previews are windows now; only kept so old settings load
     fetchPreview: true,
     // Screenshotting a JS app means loading it for real in a temporary tab.
     // 'isolated' (default) tries an Incognito window first so the page loads
@@ -28,7 +29,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.7.0+incog';
+  const BUILD = 'v0.8.0+window';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -134,17 +135,18 @@
   let host = null;
   let shadow = null;
   let panel = null;
-  let pinned = false;
   let activeLink = null;
   let hoverTimer = null;
-  let hideTimer = null;
   let requestToken = 0;
   const pointer = { x: 0, y: 0 };
   // While a screenshot is being captured, the worker may briefly focus a
   // temporary window (required on Windows). That focus change can deliver a
-  // synthetic mousemove/scroll — often at (0,0) — which would otherwise hide
-  // the panel the moment the capture lands. Ignore auto-hide until this time.
+  // synthetic mousemove/scroll — often at (0,0) — which we ignore briefly.
   let captureGraceUntil = 0;
+  // The preview is a floating window: placed once, then left where the user
+  // dragged it. Set while dragging and while re-rendering.
+  let suppressPlace = false;
+  let drag = null;
 
 
   // --- link detection ------------------------------------------------------
@@ -197,11 +199,6 @@
     panel.innerHTML = SHELL_HTML;
     shadow.append(panel);
 
-    panel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
-    panel.addEventListener('mouseleave', () => {
-      if (!pinned) scheduleHide(220);
-    });
-
     (document.body || document.documentElement).appendChild(host);
     wirePanelEvents();
   }
@@ -211,34 +208,25 @@
     host = null;
     shadow = null;
     panel = null;
-    pinned = false;
     activeLink = null;
+    drag = null;
   }
 
-  function scheduleHide(ms) {
-    if (Date.now() < captureGraceUntil) return;
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      if (!pinned) destroyOverlay();
-    }, ms);
-  }
-
-  function showOverlay(link) {
-    ensureOverlay();
-    activeLink = link;
-
+  // Position the preview window once, near the link, then leave it alone — the
+  // user can drag it anywhere and it stays until dismissed.
+  function placePanel(link) {
     const rect = link.el.getBoundingClientRect();
     const margin = 10;
 
     // Measure while laid out but invisible, so the fit test uses real sizes.
     panel.classList.add('measuring');
     panel.removeAttribute('hidden');
-    const width = panel.offsetWidth || 480;
-    const height = panel.offsetHeight || 420;
+    const width = panel.offsetWidth || 760;
+    const height = panel.offsetHeight || 520;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    let left = Math.min(Math.max(rect.left, margin), vw - width - margin);
+    let left = Math.min(Math.max(rect.left, margin), Math.max(margin, vw - width - margin));
     let top = rect.bottom + margin;
     if (top + height > vh - margin) {
       const above = rect.top - margin - height;
@@ -248,13 +236,10 @@
     panel.style.left = `${Math.round(left)}px`;
     panel.style.top = `${Math.round(top)}px`;
     panel.classList.remove('measuring');
-    pinned = false;
-    setPinUI();
   }
 
   function schedulePreview(link) {
     clearTimeout(hoverTimer);
-    clearTimeout(hideTimer);
     // In delay mode the user chose the delay; in shift mode react quickly
     // since the modifier already signals intent.
     const wait = settings.mode === 'shift' ? 120 : Math.max(120, settings.delayMs);
@@ -263,8 +248,7 @@
       // The pointer may have moved off while we waited.
       const now = linkAtPoint(pointer.x, pointer.y);
       if (settings.mode === 'delay' && now?.href !== link.href) return;
-      showOverlay(link);
-      loadPreview(link.href);
+      openPreview(link);
     }, wait);
   }
 
@@ -273,6 +257,15 @@
   }
 
   // --- preview request -----------------------------------------------------
+  // Open the preview window for a link, reusing the existing window if there is
+  // one (so jumping between links doesn't move or stack windows).
+  function openPreview(link) {
+    ensureOverlay();
+    activeLink = link;
+    if (!suppressPlace) placePanel(link);
+    loadPreview(link.href);
+  }
+
   async function loadPreview(url) {
     ensureOverlay();
     const token = ++requestToken;
@@ -298,17 +291,23 @@
 
   // --- rendering -----------------------------------------------------------
   function setState(state, url) {
-    panel.dataset.state = state;
-    q('#lps-requested').textContent = prettyUrl(url);
-    q('#lps-requested').title = url;
-    q('#lps-verdict').textContent = state === 'loading' ? 'Checking…' : '';
-    q('#lps-verdict').className = 'verdict';
-    q('#lps-title').textContent = 'Loading preview…';
-    q('#lps-final').textContent = '';
-    q('#lps-chain').replaceChildren(chainRow('Fetching redirects…'));
-    q('#lps-body').replaceChildren();
-    q('#lps-body').append(el('div', { class: 'placeholder' }, 'Resolving…'));
-    q('#lps-open').href = url;
+    // Don't re-position the window when a new link loads into it.
+    suppressPlace = true;
+    try {
+      panel.dataset.state = state;
+      q('#lps-requested').textContent = prettyUrl(url);
+      q('#lps-requested').title = url;
+      q('#lps-verdict').textContent = state === 'loading' ? 'Checking…' : '';
+      q('#lps-verdict').className = 'verdict';
+      q('#lps-title').textContent = 'Loading preview…';
+      q('#lps-final').textContent = '';
+      q('#lps-chain').replaceChildren(chainRow('Fetching redirects…'));
+      q('#lps-body').replaceChildren();
+      q('#lps-body').append(el('div', { class: 'placeholder' }, 'Resolving…'));
+      q('#lps-open').href = url;
+    } finally {
+      suppressPlace = false;
+    }
   }
 
   function renderResult(result, requestedUrl) {
@@ -544,10 +543,6 @@
 
   function wirePanelEvents() {
     q('#lps-close').addEventListener('click', () => destroyOverlay());
-    q('#lps-pin').addEventListener('click', () => {
-      pinned = !pinned;
-      setPinUI();
-    });
     q('#lps-copy').addEventListener('click', async (event) => {
       const url = q('#lps-open').href;
       try {
@@ -560,13 +555,6 @@
         /* clipboard blocked */
       }
     });
-  }
-
-  function setPinUI() {
-    const btn = q('#lps-pin');
-    if (!btn) return;
-    btn.textContent = pinned ? 'Unpin' : 'Pin';
-    btn.classList.toggle('active', pinned);
   }
 
   // --- sanitizer -----------------------------------------------------------
@@ -948,8 +936,8 @@
     lastHovered = key;
 
     if (!link) {
+      // Just stop pending opens. The window stays until it is closed.
       clearTimeout(hoverTimer);
-      if (activeLink && !pinned && !isPointOverPanel(e.clientX, e.clientY)) scheduleHide(180);
       return;
     }
 
@@ -961,11 +949,47 @@
       return;
     }
 
-    clearTimeout(hideTimer);
     schedulePreview(link);
   }
 
   document.addEventListener('mousemove', onPointerMove, { passive: true, capture: true });
+
+  // Drag the preview window by its header. The window is fixed, so a
+  // position:fixed child of the host can't be used as a "ghost" — we read the
+  // pointer's client coords directly instead.
+  document.addEventListener('pointerdown', (e) => {
+    if (!panel || panel.hasAttribute('hidden')) return;
+    const path = e.composedPath?.() || [];
+    const header = path.find((n) => n instanceof Element && n.classList?.contains('header'));
+    if (!header) return;
+    if (path.some((n) => n instanceof Element && n.closest?.('.actions'))) return; // buttons/links
+    if (e.button !== 0) return; // left button only
+
+    const rect = panel.getBoundingClientRect();
+    drag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, moved: false };
+    e.preventDefault();
+    window.addEventListener('pointermove', onDragMove, true);
+    window.addEventListener('pointerup', endDrag, true);
+  }, true);
+
+  function onDragMove(e) {
+    if (!drag || !panel) return;
+    drag.moved = true;
+    const w = panel.offsetWidth;
+    const h = panel.offsetHeight;
+    const x = e.clientX - drag.dx;
+    const y = e.clientY - drag.dy;
+    const maxX = Math.max(0, window.innerWidth - w);
+    const maxY = Math.max(0, window.innerHeight - h);
+    panel.style.left = `${Math.round(Math.min(Math.max(x, 0), maxX))}px`;
+    panel.style.top = `${Math.round(Math.min(Math.max(y, 0), maxY))}px`;
+  }
+
+  function endDrag() {
+    drag = null;
+    window.removeEventListener('pointermove', onDragMove, true);
+    window.removeEventListener('pointerup', endDrag, true);
+  }
 
   // Holding Shift while already hovering a link should open it immediately.
   document.addEventListener('keydown', (e) => {
@@ -973,10 +997,7 @@
     if (settings.mode !== 'shift') return;
     if (panel && !panel.hasAttribute('hidden')) return;
     const link = linkAtPoint(pointer.x, pointer.y);
-    if (link) {
-      showOverlay(link);
-      loadPreview(link.href);
-    }
+    if (link) openPreview(link);
   }, true);
 
   document.addEventListener('keydown', (e) => {
@@ -984,11 +1005,6 @@
       destroyOverlay();
     }
   }, true);
-
-  // Hide stale previews when the page moves underneath them.
-  window.addEventListener('scroll', () => {
-    if (panel && !pinned && !panel.hasAttribute('hidden')) scheduleHide(120);
-  }, { passive: true, capture: true });
 
   function isPointOverPanel(x, y) {
     if (!host || !panel || panel.hasAttribute('hidden')) return false;
@@ -1006,7 +1022,6 @@
       </div>
       <span class="verdict" id="lps-verdict"></span>
       <div class="actions">
-        <button id="lps-pin" title="Keep this preview open">Pin</button>
         <button id="lps-copy" title="Copy final URL">Copy URL</button>
         <a id="lps-open" target="_blank" rel="noopener noreferrer nofollow" title="Open in a new tab">Open</a>
         <button id="lps-close" title="Close (Esc)">&#10005;</button>
@@ -1027,8 +1042,11 @@
     * { box-sizing: border-box; }
     .panel {
       position: fixed;
-      width: 480px;
+      width: 780px;
       max-width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+      display: flex;
+      flex-direction: column;
       background: #12151c;
       color: #e7ebf3;
       border: 1px solid #2b3242;
@@ -1048,7 +1066,12 @@
       padding: 10px 12px;
       background: #171b24;
       border-bottom: 1px solid #262d3d;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
     }
+    .header:active { cursor: grabbing; }
+    .header .titles, .header .verdict, .header .actions { cursor: default; }
     .titles { min-width: 0; flex: 1; }
     .title {
       font-weight: 600;
@@ -1144,11 +1167,12 @@
     }
     .hop-tag.bad { background: #3a1c1c; color: #f08c8c; }
     .body-section { padding-bottom: 10px; }
-    .body { height: 320px; max-height: 46vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
-    .frame-wrap { position: relative; height: 300px; }
+    .body { height: 430px; max-height: 58vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
+    .frame-wrap { position: relative; height: 100%; min-height: 300px; }
     .shot-wrap {
       position: relative;
-      height: 300px;
+      height: 100%;
+      min-height: 300px;
       border-radius: 8px;
       overflow: hidden;
       background: #0c0f15;
