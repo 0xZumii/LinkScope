@@ -285,16 +285,62 @@
       return;
     }
 
+    const sanitized = sanitizeHtml(result.html, result.finalUrl || requestedUrl);
+    const finalUrl = result.finalUrl || requestedUrl;
+    const readable = readableLength(sanitized);
+    const meta = extractMeta(result.html, finalUrl);
+
+    // Client-rendered pages (X, many SPAs) return an empty shell whose real
+    // content only exists as OpenGraph metadata. A frame of that shell looks
+    // blank, so show a metadata card instead when there's little readable text.
+    const MIN_READABLE = 200;
+    if (readable < MIN_READABLE && (meta.title || meta.description)) {
+      renderMetaCard(
+        meta,
+        finalUrl,
+        'This page renders its content with JavaScript, which is disabled in the preview. Showing its summary instead.',
+      );
+      return;
+    }
+
     const iframe = document.createElement('iframe');
     iframe.className = 'preview-frame';
     iframe.setAttribute('sandbox', ''); // no scripts, no same-origin, no forms
     iframe.setAttribute('referrerpolicy', 'no-referrer');
-    iframe.setAttribute('loading', 'lazy');
-    iframe.srcdoc = sanitizeHtml(result.html, result.finalUrl || requestedUrl);
+    iframe.setAttribute('loading', 'eager');
+
+    // Render via a blob: URL rather than srcdoc.
+    //
+    // Why: a srcdoc document is created inside the host page's browsing context,
+    // so the host page's CSP applies to it. On sites with a strict policy that
+    // blocks third-party assets, the external stylesheets/fonts/images of the
+    // previewed page never load and the frame can look unstyled or blank. A
+    // blob: URL loads as its own document with its own (empty) CSP, so the
+    // rewritten absolute asset URLs in the sanitized HTML can load.
+    //
+    // A page whose content is client-rendered is handled above by the metadata
+    // card, since scripts are disabled by design.
+    let blobUrl = null;
+    try {
+      blobUrl = URL.createObjectURL(new Blob([sanitized], { type: 'text/html' }));
+      iframe.src = blobUrl;
+    } catch {
+      // Blob unavailable — fall back to srcdoc.
+      iframe.srcdoc = sanitized;
+    }
+
     body.append(iframe);
     body.append(
       note('Rendered in a sandboxed frame with scripts, forms and frames disabled. Some styling may not load.'),
     );
+
+    // Release the blob once the frame has loaded (keep it for buggy loaders).
+    if (blobUrl) {
+      iframe.addEventListener('load', () => {
+        // Revoke on the next macrotask so the load is fully committed.
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+      }, { once: true });
+    }
   }
 
   // --- DOM helpers ---------------------------------------------------------
@@ -375,7 +421,41 @@
       }
     }
 
-    // Resolve relative URLs so the orphaned document can load assets.
+    // Resolve relative URLs so the orphaned document can load assets. Do this
+    // by rewriting attributes directly: a blob: document has an opaque origin,
+    // so an injected <base> is not always honoured.
+    const ABSOLUTE_ATTRS = ['src', 'href', 'poster', 'srcset', 'action', 'data-src'];
+    for (const node of doc.querySelectorAll('*')) {
+      for (const attrName of ABSOLUTE_ATTRS) {
+        if (!node.hasAttribute(attrName)) continue;
+        const value = node.getAttribute(attrName);
+        if (!value || value.startsWith('#') || /^(data|blob|javascript|mailto|tel):/i.test(value)) continue;
+        try {
+          if (attrName === 'srcset') {
+            node.setAttribute(
+              attrName,
+              value
+                .split(',')
+                .map((part) => {
+                  const [u, ...rest] = part.trim().split(/\s+/);
+                  try {
+                    return [new URL(u, baseUrl).href, ...rest].join(' ');
+                  } catch {
+                    return part.trim();
+                  }
+                })
+                .join(', '),
+            );
+          } else {
+            node.setAttribute(attrName, new URL(value, baseUrl).href);
+          }
+        } catch {
+          /* leave malformed values alone */
+        }
+      }
+    }
+
+    // Belt-and-braces <base> as well.
     const base = doc.createElement('base');
     base.href = baseUrl;
     doc.head.prepend(base);
@@ -399,6 +479,83 @@
     } catch {
       return '';
     }
+  }
+
+  // Pull OpenGraph/Twitter metadata. This is the only useful content available
+  // for client-rendered pages (X, many news sites) whose body is built by JS.
+  function extractMeta(html, baseUrl) {
+    const meta = { title: '', description: '', image: '', siteName: '' };
+    if (!html) return meta;
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(html, 'text/html');
+    } catch {
+      return meta;
+    }
+    const content = (selector) => doc.querySelector(selector)?.getAttribute('content')?.trim() || '';
+
+    meta.title =
+      content('meta[property="og:title"]') ||
+      content('meta[name="twitter:title"]') ||
+      doc.querySelector('title')?.textContent?.trim() ||
+      '';
+    meta.description =
+      content('meta[property="og:description"]') ||
+      content('meta[name="description"]') ||
+      content('meta[name="twitter:description"]') ||
+      '';
+    meta.image =
+      content('meta[property="og:image"]') ||
+      content('meta[name="twitter:image"]') ||
+      content('meta[itemprop="image"]') ||
+      '';
+    meta.siteName = content('meta[property="og:site_name"]') || '';
+
+    if (meta.image) {
+      try {
+        meta.image = new URL(meta.image, baseUrl).href;
+      } catch {
+        meta.image = '';
+      }
+    }
+    meta.title = meta.title.slice(0, 200);
+    meta.description = meta.description.slice(0, 400);
+    return meta;
+  }
+
+  // Rough measure of how much readable content the sanitized page has. Used to
+  // decide whether to show the rendered frame or the metadata card.
+  function readableLength(html) {
+    if (!html) return 0;
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('script, style, noscript, template').forEach((n) => n.remove());
+      return (doc.body?.textContent || '').replace(/\s+/g, ' ').trim().length;
+    } catch {
+      return 0;
+    }
+  }
+
+  function renderMetaCard(meta, finalUrl, reason) {
+    const body = q('#lps-body');
+    body.replaceChildren();
+
+    const card = el('div', { class: 'card' });
+    if (meta.image) {
+      const img = document.createElement('img');
+      img.className = 'card-img';
+      img.src = meta.image;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.addEventListener('error', () => img.remove());
+      card.append(img);
+    }
+    const text = el('div', { class: 'card-text' });
+    if (meta.siteName) text.append(el('div', { class: 'card-site' }, meta.siteName));
+    text.append(el('div', { class: 'card-title' }, meta.title || prettyUrl(finalUrl)));
+    if (meta.description) text.append(el('div', { class: 'card-desc' }, meta.description));
+    card.append(text);
+    body.append(card, note(reason));
   }
 
   // --- formatting ----------------------------------------------------------
@@ -638,8 +795,26 @@
     }
     .hop-tag.bad { background: #3a1c1c; color: #f08c8c; }
     .body-section { padding-bottom: 10px; }
-    .body { height: 320px; max-height: 46vh; overflow: hidden; border-radius: 8px; background: #0c0f15; }
+    .body { height: 320px; max-height: 46vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
     .preview-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+    .card { display: block; }
+    .card-img {
+      display: block;
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      background: #1a1f2b;
+    }
+    .card-text { padding: 12px 12px 4px; }
+    .card-site {
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #6fd3a3;
+      margin-bottom: 5px;
+    }
+    .card-title { font-size: 14px; font-weight: 600; line-height: 1.35; color: #e7ebf3; }
+    .card-desc { margin-top: 7px; font-size: 12.5px; line-height: 1.5; color: #aab4c6; }
     .placeholder {
       display: grid;
       place-items: center;

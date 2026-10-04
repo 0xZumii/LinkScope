@@ -13,8 +13,12 @@ script-free frame, and see the redirect chain before you click.**
   cross-origin hops are highlighted, so you can spot shorteners, trackers and
   silent redirects to a different domain.
 - **Sandboxed rendering** — the target page's HTML is fetched by the background
-  worker, stripped of scripts/forms/frames/event handlers, and dropped into a
-  `<iframe sandbox="">` with scripts and same-origin access disabled.
+  worker, stripped of scripts/forms/frames/event handlers, and rendered in an
+  `<iframe sandbox="">` (blob URL, own origin) with scripts and same-origin
+  access disabled.
+- **Summary-card fallback** — if the page's real content is JavaScript-rendered
+  (X, many SPAs), a card built from its OpenGraph metadata is shown instead of a
+  blank frame.
 - **Two trigger modes** — plain `hover` (default) with a configurable delay, or
   `Shift + hover` if you prefer an explicit modifier.
 - **No credentials for the preview fetch** — the sandbox fetch uses
@@ -100,10 +104,11 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
 - **Only `http(s)` pages get the content script.** Content scripts do not run on
   `chrome://`, the Chrome Web Store, or `file://` pages unless you enable
   "Allow access to file URLs" for the extension.
+- **Client-rendered pages need JavaScript.** Sites like X build their content
+  with JS, which the preview disables by design. Where the served HTML is an
+  empty shell, LinkScope falls back to a summary card built from the page's
+  OpenGraph metadata instead of showing a blank frame.
 - Sites that require login render as a login page (by design — no credentials).
-- A page's own CSP can restrict what its `srcdoc` iframe loads; some styling may
-  not appear. The metadata + redirect chain still work.
-- JavaScript-rendered SPAs will show little content without scripts (by design).
 - `webRequest` is observational only in MV3; that is all this extension needs.
 
 ## Ideas for v2
