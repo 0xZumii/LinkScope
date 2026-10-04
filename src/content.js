@@ -24,7 +24,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.3.1+blob';
+  const BUILD = 'v0.3.2+blob';
 
   let settings = { ...DEFAULTS };
   try {
@@ -338,9 +338,14 @@
     // Client-rendered pages (X, many SPAs) serve an empty shell whose real
     // content only exists as OpenGraph metadata. Show a metadata card instead of
     // a blank frame — but only when there is actually metadata to show.
+    //
+    // Exception: a page that looks like a login prompt should always render as a
+    // frame so the sandbox behaviour (and its warning) is visible, even if it
+    // has little readable text.
     const MIN_READABLE = 200;
     const hasMeta = Boolean(meta.title || meta.description || meta.image);
-    if (readable < MIN_READABLE && hasMeta) {
+    const isLogin = looksLikeLogin(result.html);
+    if (readable < MIN_READABLE && hasMeta && !isLogin) {
       renderMetaCard(
         meta,
         finalUrl,
@@ -388,7 +393,19 @@
       iframe.srcdoc = sanitized;
     }
 
-    body.append(iframe);
+    const wrap = el('div', { class: 'frame-wrap' });
+    wrap.append(iframe);
+    wrap.append(el('div', { class: 'frame-badge' }, 'Preview'));
+    body.append(wrap);
+
+    if (looksLikeLogin(result.html)) {
+      body.append(
+        note(
+          '⚠ This page contains a sign-in form. The preview is sandboxed: forms cannot submit and the destination cannot see anything you type. Only sign in on the real site after checking the address bar.',
+        ),
+      );
+    }
+
     body.append(
       note('Rendered in a sandboxed frame with scripts, forms and frames disabled. Some styling may not load.'),
     );
@@ -537,6 +554,23 @@
       return og ? og.slice(0, 200) : '';
     } catch {
       return '';
+    }
+  }
+
+  // Detect pages that look like a credential prompt. The preview cannot submit
+  // forms (sandbox has no allow-forms), but a realistic fake login rendered in
+  // the overlay could still mislead, so we label it.
+  function looksLikeLogin(html) {
+    if (!html) return false;
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const passwords = doc.querySelectorAll('input[type="password"]').length;
+      const text = (doc.body?.textContent || '').replace(/\s+/g, ' ').toLowerCase();
+      const words =
+        /\b(sign in|log in|login|password|continue with|enter your email)\b/.test(text);
+      return passwords > 0 || (words && doc.querySelector('form'));
+    } catch {
+      return false;
     }
   }
 
@@ -908,7 +942,23 @@
     .hop-tag.bad { background: #3a1c1c; color: #f08c8c; }
     .body-section { padding-bottom: 10px; }
     .body { height: 320px; max-height: 46vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
+    .frame-wrap { position: relative; height: 300px; }
     .preview-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+    /* Makes clear the frame is a sandboxed snapshot, not the live page. */
+    .frame-badge {
+      position: absolute;
+      right: 6px;
+      bottom: 6px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(18, 21, 28, .82);
+      border: 1px solid #2b3242;
+      color: #8b96ab;
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
     .card { display: block; }
     .card-img {
       display: block;
