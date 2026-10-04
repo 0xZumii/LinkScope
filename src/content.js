@@ -29,7 +29,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.8.1+drag';
+  const BUILD = 'v0.8.2+thumb';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -842,18 +842,27 @@
     }
 
     const wrap = el('div', { class: 'shot-wrap' });
+    const thumb = el('div', { class: 'shot-thumb' });
     const img = document.createElement('img');
     img.className = 'shot-img';
     img.src = shot.dataUrl;
     img.alt = 'Screenshot of the linked page';
-    wrap.append(img);
-    wrap.append(el('div', { class: 'frame-badge' }, 'Screenshot'));
+    thumb.append(img);
+
+    // Show the capture as a scaled-down thumbnail on a checkerboard so it reads
+    // as "this is the whole page, shrunk", like a browser window on a desktop.
+    // Clicking expands it to full width for legibility.
+    thumb.title = 'Click to enlarge';
+    thumb.addEventListener('click', () => wrap.classList.toggle('zoomed'));
+
+    wrap.append(thumb, el('div', { class: 'frame-badge' }, 'Screenshot'));
     body.append(
       wrap,
       note(
-        mode === 'isolated'
-          ? 'Loaded in a temporary Incognito tab — logged out, so the page could not see your session — then closed. This is a still image, not an interactive view.'
-          : 'Loaded in a temporary tab with your browser session, then closed. This is a still image, not an interactive view.',
+        (mode === 'isolated'
+          ? 'Loaded in a temporary Incognito tab — logged out, so the page could not see your session — then closed.'
+          : 'Loaded in a temporary tab with your browser session, then closed.') +
+          ' This is a still image, not an interactive view. Click it to enlarge.',
       ),
     );
 
@@ -1166,13 +1175,30 @@
     .frame-wrap { position: relative; height: 100%; min-height: 300px; }
     .shot-wrap {
       position: relative;
-      height: 100%;
-      min-height: 300px;
+      flex: none;
+      padding: 10px;
       border-radius: 8px;
       overflow: hidden;
       background: #0c0f15;
+      /* checkerboard so the "screen" reads as a shrunk window */
+      background-image:
+        linear-gradient(45deg, #12161d 25%, transparent 25%, transparent 75%, #12161d 75%),
+        linear-gradient(45deg, #12161d 25%, transparent 25%, transparent 75%, #12161d 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 8px 8px;
     }
-    .shot-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+    .shot-thumb {
+      cursor: zoom-in;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+      background: #fff;
+    }
+    /* The capture is ~1000x720; show it small so the panel doesn't dominate. */
+    .shot-img { display: block; width: 46%; max-width: 520px; height: auto; margin: 0 auto; }
+    /* Click to expand to full panel width. Max side is clamped by the body. */
+    .shot-wrap.zoomed .shot-thumb { cursor: zoom-out; box-shadow: none; }
+    .shot-wrap.zoomed .shot-img { width: 100%; max-width: none; }
     .preview-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
     /* Makes clear the frame is a sandboxed snapshot, not the live page. */
     .frame-badge {

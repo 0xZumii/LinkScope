@@ -5,6 +5,15 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-10-04
+
+### Changed
+
+- Screenshots now render as a scaled-down thumbnail (46% width on a
+  checkerboard) rather than being cropped to fill the panel, so you can see the
+  whole captured page at a glance. Click the thumbnail to expand it to full
+  panel width.
+
 ## [0.8.1] - 2026-10-04
 
 ### Fixed

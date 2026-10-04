@@ -80,6 +80,9 @@ the same spot. Drag it anywhere by its header. Close it with the **✕** button 
 **Esc**. (This replaced the old behavior where the panel hid as soon as the
 pointer left the link.)
 
+Screenshots render as a small thumbnail on a checkerboard so the whole captured
+page is visible at a glance; click the thumbnail to expand it.
+
 ### Privacy: the fetch paths vs. the screenshot path
 
 The frame and card paths never use your credentials: the background worker
