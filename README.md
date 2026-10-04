@@ -15,8 +15,8 @@ script-free frame, and see the redirect chain before you click.**
 - **Sandboxed rendering** — the target page's HTML is fetched by the background
   worker, stripped of scripts/forms/frames/event handlers, and dropped into a
   `<iframe sandbox="">` with scripts and same-origin access disabled.
-- **Two trigger modes** — `Shift + hover` (unobtrusive) or a configurable hover
-  delay.
+- **Two trigger modes** — plain `hover` (default) with a configurable delay, or
+  `Shift + hover` if you prefer an explicit modifier.
 - **No credentials for the preview fetch** — the sandbox fetch uses
   `credentials: 'omit'`, so it never pulls your logged-in session into the preview.
 - **Zero build step** — plain JS/CSS, load it unpacked.
@@ -26,7 +26,7 @@ script-free frame, and see the redirect chain before you click.**
 1. Open `chrome://extensions`.
 2. Enable **Developer mode** (top right).
 3. Click **Load unpacked** and select this `link-preview-sandbox` folder.
-4. Open any page, hold **Shift**, and hover a link.
+4. Open any `http(s)` page and hover a link for half a second.
 
 ## Settings
 
@@ -35,8 +35,8 @@ Click the toolbar icon to configure:
 | Setting | Default | Notes |
 | --- | --- | --- |
 | Enabled | on | Master toggle |
-| Trigger | Shift + hover | or "Hover delay" |
-| Hover delay | 600 ms | used in delay mode |
+| Trigger | Hover | or "Shift + hover" |
+| Hover delay | 500 ms | how long the pointer must rest on a link |
 | Render page preview | on | turn off to only show link + redirects |
 
 ## How the redirect chain is captured
@@ -97,6 +97,9 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
 
 ### Known limitations
 
+- **Only `http(s)` pages get the content script.** Content scripts do not run on
+  `chrome://`, the Chrome Web Store, or `file://` pages unless you enable
+  "Allow access to file URLs" for the extension.
 - Sites that require login render as a login page (by design — no credentials).
 - A page's own CSP can restrict what its `srcdoc` iframe loads; some styling may
   not appear. The metadata + redirect chain still work.

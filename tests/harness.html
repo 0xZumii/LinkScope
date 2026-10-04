@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LinkScope test harness</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; background: #0f1115; color: #e7ebf3; padding: 40px; }
+      h1 { font-size: 18px; }
+      .card {
+        max-width: 640px; margin: 16px 0; padding: 16px;
+        background: #171b24; border: 1px solid #2b3242; border-radius: 10px;
+      }
+      a { color: #6fd3a3; }
+      /* Mimic X: a wrapper that reparents / re-renders content */
+      .tweet { display: flex; gap: 10px; align-items: center; }
+      .avatar { width: 40px; height: 40px; border-radius: 50%; background: #2b3242; flex: none; }
+      .meta { font-size: 12px; color: #8b96ab; }
+    </style>
+  </head>
+  <body>
+    <h1>LinkScope test harness</h1>
+
+    <div class="card">
+      <div class="meta">1. Plain anchor</div>
+      <a id="plain" href="https://example.com/page?x=1">example.com/page</a>
+    </div>
+
+    <div class="card">
+      <div class="meta">2. Anchor wrapping a span (hover target is the span)</div>
+      <a id="wrapped" href="https://httpbin.org/redirect/2"><span class="inner">httpbin.org/redirect/2</span></a>
+    </div>
+
+    <div class="card">
+      <div class="meta">3. Anchor that redirects cross-origin</div>
+      <a id="short" href="https://httpbin.org/redirect-to?url=https%3A%2F%2Fexample.org%2Ffinal">short link → example.org</a>
+    </div>
+
+    <div class="card">
+      <div class="meta">4. X-style: anchor inside a flex row, click-handled by JS (no navigation)</div>
+      <div class="tweet">
+        <div class="avatar"></div>
+        <div>
+          <div class="meta">@someone</div>
+          <a id="xlike" href="https://example.net/status/123"><span>Read on example.net</span></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="meta">5. Node replaced on hover (React re-render simulation)</div>
+      <a id="volatile" href="https://example.com/volatile">volatile target</a>
+    </div>
+
+    <script>
+      // Simulate React re-rendering on mouseover by replacing the anchor's child.
+      const vol = document.getElementById('volatile');
+      vol.addEventListener('mouseover', () => {
+        const span = document.createElement('span');
+        span.textContent = 'volatile target (re-rendered)';
+        vol.replaceChildren(span);
+      });
+    </script>
+  </body>
+</html>

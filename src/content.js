@@ -16,8 +16,8 @@
 
   const DEFAULTS = {
     enabled: true,
-    mode: 'shift', // 'shift' | 'delay'
-    delayMs: 600,
+    mode: 'delay', // 'delay' (plain hover) | 'shift' (Shift + hover)
+    delayMs: 500,
     fetchPreview: true,
   };
 
@@ -73,7 +73,18 @@
     host = document.createElement('div');
     host.id = HOST_ID;
     host.setAttribute('data-lps', 'overlay');
-    host.style.cssText = 'all:initial;position:fixed;z-index:2147483647;top:0;left:0;';
+    // A fixed, full-viewport, layout-neutral container. Without an explicit size
+    // the host collapses to 0x0 and clips the shadow panel inside it.
+    host.style.cssText = [
+      'all:initial',
+      'position:fixed',
+      'inset:0',
+      'width:100vw',
+      'height:100vh',
+      'z-index:2147483647',
+      'pointer-events:none', // let clicks through except on the panel itself
+      'display:block',
+    ].join(';');
     shadow = host.attachShadow({ mode: 'closed' });
 
     const style = document.createElement('style');
@@ -143,11 +154,17 @@
   function schedulePreview(link) {
     clearTimeout(hoverTimer);
     clearTimeout(hideTimer);
+    // In delay mode the user chose the delay; in shift mode react quickly
+    // since the modifier already signals intent.
+    const wait = settings.mode === 'shift' ? 120 : Math.max(120, settings.delayMs);
     hoverTimer = setTimeout(() => {
       if (!link.el.isConnected) return;
+      // The pointer may have moved off while we waited.
+      const now = linkAtPoint(pointer.x, pointer.y);
+      if (settings.mode === 'delay' && now?.href !== link.href) return;
       showOverlay(link);
       loadPreview(link.href);
-    }, 130);
+    }, wait);
   }
 
   function cancelPending() {
@@ -407,47 +424,54 @@
   }
 
   // --- global listeners ----------------------------------------------------
-  document.addEventListener('mousemove', (e) => {
+
+  // Single source of truth for "which link is under the pointer". Using
+  // mousemove + elementFromPoint is far more robust than mouseover on SPAs
+  // (X, YouTube, etc.) where nodes are re-rendered while the pointer sits still.
+  let lastHovered = null;
+
+  function onPointerMove(e) {
     pointer.x = e.clientX;
     pointer.y = e.clientY;
-  }, { passive: true, capture: true });
-
-  document.addEventListener('mouseover', (e) => {
     if (!settings.enabled) return;
-    const link = resolveLink(e.target);
-    if (!link || link.el === activeLink?.el) return;
 
-    if (settings.mode === 'shift') {
-      if (!e.shiftKey) return;
-      schedulePreview(link); // brief confirm delay to avoid flicker while moving
+    const overPanel = isPointOverPanel(e.clientX, e.clientY);
+    if (overPanel) {
+      lastHovered = null;
+      clearTimeout(hoverTimer);
       return;
     }
 
-    // Delay mode: open after the pointer rests on the link.
-    clearTimeout(hoverTimer);
-    clearTimeout(hideTimer);
-    hoverTimer = setTimeout(() => {
-      if (link.el.isConnected) {
-        showOverlay(link);
-        loadPreview(link.href);
-      }
-    }, settings.delayMs);
-  }, true);
+    const link = linkAtPoint(e.clientX, e.clientY);
+    const key = link?.href || null;
 
-  document.addEventListener('mouseout', (e) => {
-    const link = resolveLink(e.target);
-    if (!link) return;
-    if (link.el === activeLink?.el) {
-      cancelPending();
-      if (!pinned) scheduleHide(200);
-    } else {
-      cancelPending();
+    if (key === lastHovered) return; // still on the same link (or still on none)
+    lastHovered = key;
+
+    if (!link) {
+      clearTimeout(hoverTimer);
+      if (activeLink && !pinned && !isPointOverPanel(e.clientX, e.clientY)) scheduleHide(180);
+      return;
     }
-  }, true);
 
-  // Shift pressed while already hovering a link.
+    if (link.el === activeLink?.el) return;
+
+    if (settings.mode === 'shift') {
+      if (!e.shiftKey) return; // wait for Shift
+      schedulePreview(link);
+      return;
+    }
+
+    clearTimeout(hideTimer);
+    schedulePreview(link);
+  }
+
+  document.addEventListener('mousemove', onPointerMove, { passive: true, capture: true });
+
+  // Holding Shift while already hovering a link should open it immediately.
   document.addEventListener('keydown', (e) => {
-    if (!settings.enabled || e.key !== 'Shift' || settings.mode !== 'shift') return;
+    if (e.key !== 'Shift' || !settings.enabled) return;
+    if (settings.mode !== 'shift') return;
     if (panel && !panel.hasAttribute('hidden')) return;
     const link = linkAtPoint(pointer.x, pointer.y);
     if (link) {
@@ -466,6 +490,12 @@
   window.addEventListener('scroll', () => {
     if (panel && !pinned && !panel.hasAttribute('hidden')) scheduleHide(120);
   }, { passive: true, capture: true });
+
+  function isPointOverPanel(x, y) {
+    if (!host || !panel || panel.hasAttribute('hidden')) return false;
+    const r = panel.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
 
   // --- static markup -------------------------------------------------------
   const SHELL_HTML = `
@@ -507,6 +537,7 @@
       box-shadow: 0 18px 50px rgba(0,0,0,.55);
       font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
+      pointer-events: auto; /* host is pointer-events:none; re-enable here */
     }
     .panel[hidden] { display: none; }
     /* Laid out for measurement, but invisible. */

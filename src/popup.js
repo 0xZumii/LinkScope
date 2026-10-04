@@ -2,8 +2,8 @@
 
 const DEFAULTS = {
   enabled: true,
-  mode: 'shift',
-  delayMs: 600,
+  mode: 'delay',
+  delayMs: 500,
   fetchPreview: true,
 };
 
