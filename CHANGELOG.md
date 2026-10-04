@@ -5,6 +5,21 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-10-04
+
+### Added
+
+- Soft-404 detection: sites that return HTTP 200 with an HTML "not found" page
+  (link shorteners such as `t.co`, X, and others) are now explained as
+  "Page not found" instead of rendering a generic failure.
+
+### Fixed
+
+- JavaScript app shells were being **framed** whenever they carried more than a
+  couple hundred characters of boilerplate text, which pinned them to `frame`
+  and skipped the card/screenshot fallback. Empty shells (empty body, many
+  scripts) are now sent to the card/screenshot path regardless of boilerplate.
+
 ## [0.8.2] - 2026-10-04
 
 ### Changed

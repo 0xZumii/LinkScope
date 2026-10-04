@@ -29,7 +29,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.8.2+thumb';
+  const BUILD = 'v0.9.0+detect';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -409,11 +409,24 @@
       return;
     }
 
+    // Some sites (notably link shorteners) return HTTP 200 with an HTML "not
+    // found" page. Explain that rather than showing a stray screenshot.
+    const soft404 = detectSoft404(result, sanitized);
+    if (soft404) {
+      rememberMode(host, 'block');
+      body.append(
+        el('div', { class: 'placeholder' }, soft404.title),
+        note(soft404.detail),
+      );
+      return;
+    }
+
     // Client-rendered pages (X, many SPAs) serve an empty shell whose real
-    // content only exists as OpenGraph metadata or as pixels. When there is
-    // little readable HTML we have a genuine choice between a metadata card and
-    // a screenshot — and that ambiguity is the only place memory changes the
-    // outcome.
+    // content only exists as OpenGraph metadata or as pixels. Treat that empty
+    // shell as "no content" for all of the decisions below — crucially, so it
+    // can't be *framed* and pinned to `frame` just for having some boilerplate
+    // text (which is what stopped many JS pages from using card/screenshot).
+    const isShell = isEmptyShell(sanitized, result.html);
     //
     // Hard signals are never overridden. A login prompt always renders as a
     // frame (so the sandbox warning is visible), a bot wall was handled above,
@@ -425,7 +438,7 @@
 
     // What the current signals suggest, ignoring memory.
     let mode;
-    if (isLogin || readable >= MIN_READABLE) mode = 'frame';
+    if (isLogin || (readable >= MIN_READABLE && !isShell)) mode = 'frame';
     else mode = hasMeta ? 'card' : 'shot';
 
     // In the ambiguous low-content case, prefer whatever worked for this host
@@ -767,6 +780,66 @@
       };
     }
     return null;
+  }
+
+  // A page whose served HTML is essentially empty of content — a client-side
+  // app shell, a lazy loader, or an error/interstitial page. Used so we don't
+  // frame such a page just because it has a few dozen characters of boilerplate.
+  function isEmptyShell(sanitizedHtml, rawHtml) {
+    try {
+      const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html');
+      doc.querySelectorAll('script, style, noscript, template').forEach((n) => n.remove());
+      const text = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.length >= 150) return false;
+      const links = doc.querySelectorAll('a[href]').length;
+      const media = doc.querySelectorAll('img, video, canvas, picture').length;
+      // Raw (pre-sanitization) is the tell for a JS shell: it has content to
+      // render, but the body is empty until scripts run.
+      const rawLen = (rawHtml || '').length;
+      const scriptDriven = rawLen > 2000 && rawLen / Math.max(text.length, 1) > 50;
+      return text.length < 120 && links <= 3 && media <= 1 && scriptDriven;
+    } catch {
+      return false;
+    }
+  }
+
+  // Soft 404s: sites like t.co, and many link shorteners, return HTTP 200 with
+  // an HTML "not found" page. Detect a couple of common shapes so the panel
+  // explains it rather than showing a generic error or a stray screenshot.
+  function detectSoft404(result, sanitizedHtml) {
+    const status = result.status || 0;
+    if (status >= 400) return null; // hard HTTP errors are reported elsewhere
+
+    let text = '';
+    try {
+      const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html');
+      text = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    } catch {
+      /* ignore */
+    }
+    if (!text) return null;
+
+    const phrases = [
+      'page not found',
+      "page doesn't exist",
+      'page does not exist',
+      'nothing to see here',
+      'no longer exists',
+      'content isn’t available', // Twitter/X "Hmm...this page doesn't exist"
+      "content isn't available",
+      'this page isn’t available',
+      "this page isn't available",
+      'we couldn’t find that page',
+      "we couldn't find that page",
+    ];
+    if (!phrases.some((p) => text.includes(p))) return null;
+    if (text.length > 500) return null; // real pages with a comment can be long
+
+    return {
+      title: 'Page not found',
+      detail:
+        'This link points to a page the site reports as missing (a "soft 404"). This is common for expired or deleted link-shortener targets. Clicking it would land on the same error page.',
+    };
   }
 
   // Rough measure of how much readable content the sanitized page has. Used to
