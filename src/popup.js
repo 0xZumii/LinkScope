@@ -5,6 +5,7 @@ const DEFAULTS = {
   mode: 'delay',
   delayMs: 500,
   fetchPreview: true,
+  allowScreenshots: true,
 };
 
 const RENDER_MEMORY_KEY = 'renderMemory';
@@ -15,6 +16,7 @@ const els = {
   delayMs: document.getElementById('delayMs'),
   delayValue: document.getElementById('delayValue'),
   fetchPreview: document.getElementById('fetchPreview'),
+  allowScreenshots: document.getElementById('allowScreenshots'),
   reset: document.getElementById('reset'),
   clearMemory: document.getElementById('clearMemory'),
   memoryCount: document.getElementById('memoryCount'),
@@ -26,6 +28,7 @@ function apply(settings) {
   els.delayMs.value = settings.delayMs;
   els.delayValue.textContent = settings.delayMs;
   els.fetchPreview.checked = settings.fetchPreview;
+  els.allowScreenshots.checked = settings.allowScreenshots;
 }
 
 function renderMemoryCount() {
@@ -45,6 +48,7 @@ renderMemoryCount();
 els.enabled.addEventListener('change', () => save({ enabled: els.enabled.checked }));
 els.mode.addEventListener('change', () => save({ mode: els.mode.value }));
 els.fetchPreview.addEventListener('change', () => save({ fetchPreview: els.fetchPreview.checked }));
+els.allowScreenshots.addEventListener('change', () => save({ allowScreenshots: els.allowScreenshots.checked }));
 els.delayMs.addEventListener('input', () => {
   els.delayValue.textContent = els.delayMs.value;
   save({ delayMs: Number(els.delayMs.value) });

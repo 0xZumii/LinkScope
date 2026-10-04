@@ -5,6 +5,22 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-10-04
+
+### Added
+
+- **"Load pages for screenshots" setting** (on by default). The screenshot
+  fallback is the only preview path that loads a link live — scripts enabled,
+  using your browser session — so it can now be switched off. JS-only pages then
+  show a "no renderable preview" explanation instead of opening the link.
+
+### Changed
+
+- Corrected the privacy documentation. The credential-less `credentials: 'omit'`
+  guarantee covers only the fetch-based frame/card paths; the README, store
+  privacy policy, and the in-panel caption now state that the screenshot path
+  loads the page live with your session.
+
 ## [0.5.3] - 2026-10-04
 
 ### Fixed

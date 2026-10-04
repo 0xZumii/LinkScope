@@ -20,8 +20,9 @@ script-free frame, and see the redirect chain before you click.**
   (X, many SPAs), a card built from its OpenGraph metadata is shown instead of a
   blank frame.
 - **Screenshot fallback** — if there is neither renderable HTML nor metadata, the
-  page is loaded in a temporary background tab, photographed, and the tab is
-  closed. Shows how a JS-heavy page actually looks.
+  page is loaded **for real** in a temporary tab (scripts enabled, your browser
+  session), photographed, and the tab closed. Shows how a JS-heavy page actually
+  looks; can be turned off (see Privacy).
 - **Per-site memory** — remembers whether a host needed a summary card or a
   screenshot, so a known site renders the same way instead of being re-guessed
   on every hover. Clearable from the popup.
@@ -29,8 +30,10 @@ script-free frame, and see the redirect chain before you click.**
   recognised and explained instead of appearing as a blank frame.
 - **Two trigger modes** — plain `hover` (default) with a configurable delay, or
   `Shift + hover` if you prefer an explicit modifier.
-- **No credentials for the preview fetch** — the sandbox fetch uses
-  `credentials: 'omit'`, so it never pulls your logged-in session into the preview.
+- **No credentials for the fetch** — the frame/card paths use
+  `credentials: 'omit'`, so they never pull your logged-in session into the
+  preview. The screenshot path is the exception (it loads the page live) and is
+  documented below.
 - **Zero build step** — plain JS/CSS, load it unpacked.
 
 ## How a link is rendered
@@ -49,9 +52,25 @@ there is real content to show, and only then per-site memory:
 3. **Summary card.** A client-rendered shell (X, many SPAs) has little readable
    HTML but usually carries OpenGraph tags. Those become a title + description +
    image card rather than a blank frame.
-4. **Screenshot.** A shell with no usable metadata is loaded in a temporary
-   background tab, photographed, and the tab closed — so JS-heavy pages still
-   show how they actually look.
+4. **Screenshot.** A shell with no usable metadata is loaded **live** in a
+   temporary tab — scripts enabled, your browser session — then photographed and
+   closed. This is the only path that runs the page's JavaScript; it can be
+   disabled (see Privacy).
+
+### Privacy: the fetch paths vs. the screenshot path
+
+The frame and card paths never use your credentials: the background worker
+fetches the HTML with `credentials: 'omit'`, and everything is rendered with
+scripts disabled. Those paths cannot act as you.
+
+The screenshot path is different by necessity. A script-free sandbox cannot
+render a JavaScript app, so to photograph one LinkScope opens it in a temporary,
+non-incognito tab using your normal profile. That means the page runs its
+scripts **with your cookies/session**, exactly as if you had opened it yourself.
+It can therefore set cookies, fire analytics, register service workers, and it
+adds a history entry. The tab is closed immediately after capture, and the panel
+says so. If you don't want that, turn off **Load pages for screenshots** in the
+popup — JS-only pages then show a "no renderable preview" explanation instead.
 
 ### Why a `blob:` URL instead of `srcdoc`
 
@@ -98,6 +117,7 @@ Click the toolbar icon to configure:
 | Trigger | Hover | or "Shift + hover" |
 | Hover delay | 500 ms | how long the pointer must rest on a link |
 | Render page preview | on | turn off to only show link + redirects |
+| Load pages for screenshots | on | allow the live-tab screenshot fallback (uses your session) |
 | Remembered sites | — | count of learned hosts; **Clear** forgets them |
 
 ## How the redirect chain is captured
@@ -142,8 +162,9 @@ src/
 
 `<all_urls>` is required because `chrome.tabs.captureVisibleTab` (the screenshot
 fallback) rejects `http://*/*` / `https://*/*` grants and refuses `activeTab`
-(which only applies to a user-invoked tab, not a background one). The extension
-never reads page content beyond the single URL you hover.
+(which only applies to a user-invoked tab, not a background one). Besides the
+single URL you hover, the extension only opens that URL live for the screenshot
+fallback when **Load pages for screenshots** is enabled.
 
 ## Chrome Web Store
 
@@ -175,13 +196,14 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
 
 | Risk | Mitigation |
 | --- | --- |
-| Scripts in previewed page run | `sandbox=""` (no `allow-scripts`) + scripts stripped |
+| Scripts in the sandboxed frame run | `sandbox=""` (no `allow-scripts`) + scripts stripped |
 | Preview reaches into the host page | closed shadow root + opaque iframe origin |
-| Stealing your session | preview fetch uses `credentials: 'omit'` |
+| Stealing your session via the fetch | frame/card fetch uses `credentials: 'omit'` |
 | Tracking via Referer | `referrerpolicy="no-referrer"` on the iframe |
 | Clickjacking through the preview | `pointer-events:none` on links inside the frame |
 | Huge/streaming responses | body read is capped (~900 KB) |
 | Hanging requests | 9 s `AbortController` timeout |
+| **Screenshot path runs the page live** | temporary tab, closed immediately; **disable with "Load pages for screenshots"** (it does use your session) |
 
 ### Known limitations
 
@@ -190,8 +212,12 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
   "Allow access to file URLs" for the extension.
 - **Client-rendered pages need JavaScript.** Sites like X build their content
   with JS, which the preview disables by design. Where the served HTML is an
-  empty shell, LinkScope falls back to a metadata card or a background-tab
-  screenshot instead of showing a blank frame.
+  empty shell, LinkScope falls back to a metadata card or a live-tab screenshot
+  instead of showing a blank frame.
+- **Screenshots load the page for real.** Because a script-free sandbox can't
+  render a JS app, the screenshot fallback opens the link in a temporary tab with
+  scripts and your session. Disable it with **Load pages for screenshots** if you
+  don't want that.
 - Sites that require login render as a login page (by design — no credentials).
 - `webRequest` is observational only in MV3; that is all this extension needs.
 

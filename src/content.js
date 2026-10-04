@@ -19,12 +19,16 @@
     mode: 'delay', // 'delay' (plain hover) | 'shift' (Shift + hover)
     delayMs: 500,
     fetchPreview: true,
+    // Screenshotting a JS app means loading it for real in a temporary tab,
+    // with scripts enabled and the browser's session. Gate it so users can opt
+    // out of that live load; the fetch-based paths never touch credentials.
+    allowScreenshots: true,
   };
 
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.5.3+focus';
+  const BUILD = 'v0.6.0+live';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -450,6 +454,15 @@
     }
 
     if (mode === 'shot') {
+      if (!settings.allowScreenshots) {
+        body.append(
+          el('div', { class: 'placeholder' }, 'No renderable preview'),
+          note(
+            'This page needs JavaScript. Live screenshots are turned off in settings — turn on "Load pages for screenshots" to photograph it. That opens the link for real in a temporary tab, with scripts enabled and using your browser session.',
+          ),
+        );
+        return;
+      }
       // Remembered only once the capture actually succeeds (see
       // renderScreenshotFallback) so a failed screenshot isn't cached.
       renderScreenshotFallback(finalUrl, result.status);
@@ -815,7 +828,10 @@
 
     const loading = el('div', { class: 'shot-wrap' });
     loading.append(el('div', { class: 'placeholder' }, 'Capturing a screenshot…'));
-    body.append(loading, note('This page is rendered by JavaScript, so LinkScope is loading it in a background tab to photograph it.'));
+    body.append(
+      loading,
+      note('This page is rendered by JavaScript, so LinkScope is opening it for real in a temporary tab (scripts enabled, using your browser session) to photograph it.'),
+    );
 
     // Cover the whole capture (plus a short tail) against the focus-change
     // events described on captureGraceUntil.
@@ -853,7 +869,7 @@
     img.alt = 'Screenshot of the linked page';
     wrap.append(img);
     wrap.append(el('div', { class: 'frame-badge' }, 'Screenshot'));
-    body.append(wrap, note('Captured in a background tab and then closed. This is how the page looks, not a live view.'));
+    body.append(wrap, note('Captured from a temporary tab that loaded the page live — scripts ran and your browser session was used — then closed. This is a still image, not an interactive view.'));
 
     // Only now that the capture worked do we cache "screenshot" for this host.
     rememberMode(memoryKey(shot.finalUrl || finalUrl), 'shot');

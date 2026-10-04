@@ -42,8 +42,9 @@ WHAT YOU GET
   same-origin access disabled.
 • Summary-card fallback — if a page is JavaScript-rendered (X, many SPAs), its
   OpenGraph title, description and image are shown instead of a blank frame.
-• Screenshot fallback — pages with neither usable HTML nor metadata are loaded in
-  a temporary background tab, photographed, and the tab closed.
+• Screenshot fallback — pages with neither usable HTML nor metadata are loaded
+  live in a temporary tab, photographed, and the tab closed. This is the one path
+  that runs the page's scripts; it can be turned off in settings.
 • Bot-wall detection — Cloudflare-style "Just a moment…" pages are recognised and
   explained instead of appearing blank.
 • Per-site memory — LinkScope remembers whether a site needed a summary card or a
@@ -52,10 +53,13 @@ WHAT YOU GET
 
 PRIVATE BY DESIGN
 
-• The preview fetch uses credentials: 'omit' — your logged-in session is never
-  pulled into the preview.
-• Previews render with scripts disabled in an opaque-origin sandbox.
+• The frame/card preview fetch uses credentials: 'omit' — your logged-in session
+  is never pulled into it, and scripts are disabled in an opaque-origin sandbox.
 • Referrers are suppressed on the preview frame.
+• The screenshot fallback is the exception: because a script-free sandbox cannot
+  render a JS app, it loads the page in a temporary tab with scripts and your
+  browser session, then closes it. Disable it with "Load pages for screenshots"
+  if you don't want that.
 • Nothing is sent to the developer. There are no analytics, no accounts, and no
   remote servers. Settings and per-site memory stay in your browser.
 • No build step, no third-party libraries: the whole extension is plain
@@ -67,14 +71,13 @@ PERMISSIONS, AND WHY
 • webRequest — observe the extension's own preview fetch to reconstruct the
   redirect chain (observational only; it does not read your browsing or block
   anything).
-• tabs — open a temporary background tab to screenshot JS-only pages, then close
-  it.
+• tabs — open a temporary tab to screenshot JS-only pages, then close it.
 • Access to all sites — needed to fetch whichever link you hover, on any site.
 
 Only http(s) links get a preview, only the single URL you hover is fetched, and
 the result is discarded when the preview closes.
 
-New in 0.5.0: per-site memory, so commonly previewed sites render instantly.
+New in 0.6.0: an opt-out for the live-load screenshot fallback.
 ```
 
 ## Support / contact

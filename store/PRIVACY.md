@@ -1,8 +1,9 @@
 # LinkScope — Privacy
 
-LinkScope is a link-preview extension. It is built so that previewing a link does
-not leak your browsing, your session, or your data to anyone — including the
-developer.
+LinkScope is a link-preview extension. It never sends your data to the developer,
+and the sandboxed frame/card preview never uses your session. The optional
+screenshot fallback is the one path that loads a page live, and it is described
+in full below.
 
 ## Short version
 
@@ -11,8 +12,11 @@ developer.
 - **Settings** are stored in `chrome.storage.sync` (and sync via your Google
   account if you have sync enabled).
 - **Per-site render memory** is stored in `chrome.storage.local` on your device.
-- A hovered link is fetched **directly by your browser** from the destination
-  site, the same way clicking the link would.
+- The frame/card preview is fetched **directly by your browser without
+  credentials** (`credentials: 'omit'`).
+- The **screenshot fallback is the exception**: it loads the page for real in a
+  temporary tab, using scripts and your browser session, then closes it. It can
+  be turned off with **Load pages for screenshots**.
 
 ## What LinkScope processes, and where
 
@@ -20,8 +24,9 @@ developer.
 | --- | --- | --- |
 | The URL you hover | Fetch the page to build the preview and redirect chain | Your browser → the destination site. Nothing is sent to the developer. |
 | The destination's HTML | Sanitized and rendered in a sandboxed frame | Stays in your browser; discarded when the preview closes |
-| Settings (enabled, trigger, delay, render preview) | Remember your preferences | `chrome.storage.sync` |
+| Settings (enabled, trigger, delay, render preview, allow screenshots) | Remember your preferences | `chrome.storage.sync` |
 | Per-site render memory (host + first path segment → card/screenshot, timestamp) | Render known sites consistently | `chrome.storage.local` (capped at 500 entries; clearable) |
+| The page as rendered live (screenshot fallback only) | Photograph a JavaScript-only page | Loaded in a temporary tab with your session; the still image stays in your browser and is discarded when the preview closes |
 
 LinkScope does not read or transmit the content of pages you visit beyond the
 single link you explicitly hover.
@@ -31,9 +36,16 @@ single link you explicitly hover.
 When you hover a link, the background service worker issues one `fetch()` to that
 URL with `credentials: 'omit'`, `redirect: 'follow'` and `cache: 'no-store'`.
 Because credentials are omitted, the request never carries your cookies, and the
-destination cannot tie the preview to a logged-in session. For pages with no
-previewable HTML, LinkScope may open the URL in a temporary, background tab,
-capture a screenshot, and immediately close the tab.
+destination cannot tie the fetch-based preview to a logged-in session.
+
+For JavaScript-only pages with no previewable HTML or metadata, LinkScope can
+instead open the URL **live** in a temporary, non-incognito tab, wait for it to
+render, capture a screenshot, and close the tab. That path uses your normal
+profile, so the page runs its scripts with your cookies/session — exactly as if
+you had opened it yourself — and may set cookies, fire analytics, or register
+service workers. You can disable this path entirely with **Load pages for
+screenshots**; JS-only pages will then show a "no renderable preview"
+explanation instead.
 
 ## Permissions and why each is needed
 
@@ -41,8 +53,8 @@ capture a screenshot, and immediately close the tab.
 - **`webRequest`** — observe the extension's *own* preview fetches to reconstruct
   the redirect chain. Observational only: LinkScope does not block, modify, or
   inspect your normal browsing traffic.
-- **`tabs`** — open a temporary background tab to screenshot JavaScript-only
-  pages and then close it.
+- **`tabs`** — open a temporary tab to screenshot JavaScript-only pages and then
+  close it.
 - **Access to all sites (`<all_urls>`)** — a hovered link can point anywhere, so
   the extension must be able to fetch it on any site. `captureVisibleTab` (used
   for the screenshot fallback) rejects narrower `http://*/*` grants and does not
