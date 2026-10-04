@@ -23,6 +23,7 @@ const SHOT_WINDOW_WIDTH = 1000;
 const SHOT_WINDOW_HEIGHT = 720;
 const SHOT_LOAD_TIMEOUT_MS = 12000;
 const SHOT_SETTLE_MS = 900; // let fonts/paint settle after load
+const SHOT_FOCUS_SETTLE_MS = 300; // after focusing, before capture
 
 /** @type {Map<number, RequestRecord>} */
 const chains = new Map();
@@ -286,6 +287,17 @@ async function captureScreenshot(rawUrl) {
 
   let win = null;
   let tabId = null;
+  let focusedForCapture = false;
+  let previousWindowId = null;
+
+  // Remember the window to hand focus back to if we have to steal it.
+  try {
+    const previous = await chrome.windows.getLastFocused();
+    previousWindowId = previous?.id ?? null;
+  } catch {
+    /* getLastFocused can fail when no Chrome window is focused */
+  }
+
   try {
     win = await chrome.windows.create({
       url,
@@ -310,8 +322,8 @@ async function captureScreenshot(rawUrl) {
     }
     await sleep(SHOT_SETTLE_MS);
 
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
-      format: 'png',
+    const dataUrl = await captureVisible(windowId, () => {
+      focusedForCapture = true;
     });
 
     return {
@@ -329,6 +341,33 @@ async function captureScreenshot(rawUrl) {
       else if (tabId != null) await chrome.tabs.remove(tabId);
     } catch {
       /* window may already be gone */
+    }
+    // If we had to take focus to capture, give it back.
+    if (focusedForCapture && previousWindowId != null) {
+      try {
+        await chrome.windows.update(previousWindowId, { focused: true });
+      } catch {
+        /* previous window may have been closed */
+      }
+    }
+  }
+}
+
+// captureVisibleTab refuses to capture a window that isn't focused on some
+// platforms (notably Windows), even when an explicit windowId is supplied. Try
+// the quiet path first; if it fails, focus the capture window just long enough
+// to grab the frame. `onFocus` lets the caller know focus must be restored.
+async function captureVisible(windowId, onFocus) {
+  try {
+    return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+  } catch (firstErr) {
+    try {
+      await chrome.windows.update(windowId, { focused: true });
+      onFocus?.();
+      await sleep(SHOT_FOCUS_SETTLE_MS);
+      return await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+    } catch (secondErr) {
+      throw new Error(String(secondErr?.message || secondErr || firstErr?.message || firstErr));
     }
   }
 }

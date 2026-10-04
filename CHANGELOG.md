@@ -5,6 +5,21 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-10-04
+
+### Fixed
+
+- Screenshot fallback failed on Windows because `captureVisibleTab` refuses a
+  window that isn't focused. The capture now retries with the temporary window
+  focused and hands focus straight back to the window you were using.
+- The failure/success note under the preview body was pushed out of view by a
+  full-height placeholder; placeholders now size to their content so the
+  explanation (including screenshot errors) is visible.
+- Removed a CSP `base-uri` violation logged on strict-CSP host pages (Gmail,
+  LinkedIn). The `<base>` tag is now injected as markup into the generated
+  preview instead of being set on the parsed document, so it no longer trips the
+  host page's policy.
+
 ## [0.5.1] - 2026-10-04
 
 ### Fixed

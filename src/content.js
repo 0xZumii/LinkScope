@@ -24,7 +24,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.5.1+meta';
+  const BUILD = 'v0.5.2+shot';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -615,17 +615,20 @@
       }
     }
 
-    // Belt-and-braces <base> as well.
-    const base = doc.createElement('base');
-    base.href = baseUrl;
-    doc.head.prepend(base);
+    // Belt-and-braces <base> for anything we didn't rewrite (e.g. CSS url()).
+    // Injected as markup into the serialized output rather than set on this
+    // DOMParser document: setting a base URI on the parsed document is checked
+    // against the *host page's* `base-uri` CSP, which logs a violation on sites
+    // like Gmail and LinkedIn. A blob: document gets its own, empty CSP.
+    const baseTag = `<base href="${escapeAttribute(baseUrl)}">`;
 
     // Disable link navigation inside the preview (clicks do nothing).
     const guard = doc.createElement('style');
     guard.textContent = 'a{pointer-events:none;cursor:default!important}';
     doc.head.append(guard);
 
-    return `<!doctype html>${doc.documentElement.outerHTML}`;
+    const out = `<!doctype html>${doc.documentElement.outerHTML}`;
+    return out.replace(/<head(\s[^>]*)?>/i, (m) => `${m}${baseTag}`);
   }
 
   function extractTitle(html) {
@@ -865,6 +868,10 @@
 
   function escapeText(value) {
     return String(value).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+  }
+
+  function escapeAttribute(value) {
+    return String(value).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
   }
 
   // --- global listeners ----------------------------------------------------
@@ -1136,7 +1143,7 @@
     .placeholder {
       display: grid;
       place-items: center;
-      height: 100%;
+      min-height: 120px;
       padding: 16px;
       text-align: center;
       color: #7f8a9e;
