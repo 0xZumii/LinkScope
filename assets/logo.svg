@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="LinkScope logo">
+  <title>LinkScope</title>
+
+  <!-- Rounded dark tile -->
+  <rect width="512" height="512" rx="112" fill="#12151c"/>
+
+  <!-- Viewfinder reticle corner brackets -->
+  <g fill="none" stroke="#6fd3a3" stroke-width="24" stroke-linecap="round" opacity="0.9">
+    <path d="M124 176 V152 a28 28 0 0 1 28-28 h24"/>
+    <path d="M336 124 h24 a28 28 0 0 1 28 28 v24"/>
+    <path d="M388 336 v24 a28 28 0 0 1-28 28 h-24"/>
+    <path d="M176 388 h-24 a28 28 0 0 1-28-28 v-24"/>
+  </g>
+
+  <!-- Two interlocking chain links, offset along a diagonal -->
+  <g fill="none" stroke-linecap="round">
+    <!-- back link (dimmed) -->
+    <g stroke="#2f6b52" stroke-width="26" stroke-linejoin="round">
+      <rect x="150" y="150" width="132" height="132" rx="66" transform="rotate(45 216 216)"/>
+    </g>
+    <!-- front link (bright) -->
+    <g stroke="#6fd3a3" stroke-width="26" stroke-linejoin="round">
+      <rect x="230" y="230" width="132" height="132" rx="66" transform="rotate(45 296 296)"/>
+    </g>
+  </g>
+
+  <!-- Center accent dot: the focal point of the scope -->
+  <circle cx="256" cy="256" r="20" fill="#a9e8c6"/>
+</svg>

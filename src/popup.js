@@ -1,4 +1,4 @@
-// Popup settings for Link Preview Sandbox.
+// Popup settings for LinkScope.
 
 const DEFAULTS = {
   enabled: true,

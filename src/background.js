@@ -1,4 +1,4 @@
-// Link Preview Sandbox — background service worker (Manifest V3)
+// LinkScope — background service worker (Manifest V3)
 //
 // Two jobs:
 //   1. Observe extension-originated network requests to reconstruct redirect chains.

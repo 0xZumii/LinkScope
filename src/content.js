@@ -1,4 +1,4 @@
-// Link Preview Sandbox — content script
+// LinkScope — content script
 //
 // Hover (or Shift+hover) a link to open a preview overlay:
 //   - link metadata (title, final URL, status)

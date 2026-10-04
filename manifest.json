@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Link Preview Sandbox",
+  "name": "LinkScope",
   "version": "0.1.0",
   "description": "Hover a link to preview it in a sandboxed, script-free frame and inspect the redirect chain before you click.",
   "minimum_chrome_version": "114",
@@ -20,6 +20,18 @@
   ],
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "Link Preview Sandbox"
+    "default_title": "LinkScope",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
   }
 }

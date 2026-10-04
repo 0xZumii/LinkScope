@@ -1,9 +1,11 @@
-# Link Preview Sandbox
+# LinkScope
 
 A Manifest V3 Chrome extension: **hover a link to preview it in a sandboxed,
 script-free frame, and see the redirect chain before you click.**
 
-![concept: hover → metadata + redirect chain + sandboxed render](https://placehold.co/900x520/12151c/e7ebf3?text=Link+Preview+Sandbox)
+<p align="center">
+  <img src="assets/logo.svg" width="128" height="128" alt="LinkScope logo" />
+</p>
 
 ## Features
 
@@ -54,12 +56,32 @@ degrades gracefully to showing just the start and end URLs.
 ## Architecture
 
 ```
+manifest.json     MV3 manifest (name, icons, permissions)
+assets/
+  logo.svg        master logo (512x512)
+  icon.svg        simplified mark source (128x128)
+  icon-16/32/48/128.png  toolbar + store icons
 src/
-  manifest.json   (root manifest.json)
   background.js   service worker: webRequest chain capture + capped HTML fetch
   content.js      hover detection, shadow-DOM overlay, sanitizer, sandboxed iframe
   popup.html/js   settings UI (chrome.storage.sync)
 ```
+
+## Branding
+
+The mark is a **viewfinder reticle around a chain link / aperture** — the link
+represents the URL being inspected, the reticle represents scoping it out before
+you commit. Palette:
+
+| Role | Hex |
+| --- | --- |
+| Background | `#12151c` |
+| Primary (emerald) | `#6fd3a3` |
+| Accent (light mint) | `#a9e8c6` |
+| Muted link (logo) | `#2f6b52` |
+
+`assets/logo.svg` is the full mark; `assets/icon.svg` is the simplified version
+used to generate the PNG icons (a complex mark turns to mush at 16px).
 
 ### Security model
 

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="LinkScope icon">
+  <title>LinkScope</title>
+
+  <rect width="128" height="128" rx="28" fill="#12151c"/>
+
+  <!-- Reticle brackets -->
+  <g fill="none" stroke="#6fd3a3" stroke-width="9" stroke-linecap="round" opacity="0.85">
+    <path d="M30 46 V38 a8 8 0 0 1 8-8 h8"/>
+    <path d="M82 30 h8 a8 8 0 0 1 8 8 v8"/>
+    <path d="M98 82 v8 a8 8 0 0 1-8 8 h-8"/>
+    <path d="M46 98 h-8 a8 8 0 0 1-8-8 v-8"/>
+  </g>
+
+  <!-- Single chain link, rotated 45deg, centered -->
+  <rect x="40" y="40" width="48" height="48" rx="24"
+        transform="rotate(45 64 64)"
+        fill="none" stroke="#6fd3a3" stroke-width="10"/>
+
+  <!-- Focal dot -->
+  <circle cx="64" cy="64" r="7" fill="#a9e8c6"/>
+</svg>
