@@ -200,11 +200,14 @@ fallback (see the **Live screenshots** setting).
 
 ## Chrome Web Store
 
-Store-ready copy and policies live in `store/`:
+Store-ready copy, policies, and assets live in `store/`:
 
+- `store/SUBMISSION.md` — the end-to-end submission checklist.
 - `store/LISTING.md` — name, summary, detailed description, category.
 - `store/PRIVACY.md` — data handling and per-permission justification.
 - `store/SCREENSHOTS.md` — the 1280×800 screenshot shot list.
+- `store/promo/` — generated 440×280 promo tile and 1280×640 social image.
+- `store/screenshots/` — put the captured 1280×800 screenshots here.
 
 Version history is in `CHANGELOG.md`.
 

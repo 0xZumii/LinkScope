@@ -1,0 +1,6 @@
+# Captured store screenshots (1280x800). See SCREENSHOTS.md.
+# Leave this folder tracked so the listing structure is obvious, but ignore the
+# image files until real captures are added.
+*.png
+*.jpg
+*.jpeg

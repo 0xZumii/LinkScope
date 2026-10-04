@@ -1,12 +1,13 @@
 # Store screenshots
 
 The Chrome Web Store wants **1280×800** (or 640×400) PNG/JPEG screenshots, 1–5
-of them, plus a **440×280** small promo tile. This file is the shot list and the
-steps to reproduce each one.
+of them, plus a **440×280** small promo tile (already generated at
+`store/promo/promo-440x280.png`). This file is the shot list and the steps to
+reproduce each one.
 
 ## Prerequisites
 
-- Build/version: `0.5.0` (manifest version).
+- Build/version: current `manifest.json` version.
 - Load the extension unpacked (`chrome://extensions` → Load unpacked).
 - Start with a clean profile or clear memory first, so "Remembered sites" reads
   `0 hosts` for the settings shot.
@@ -48,9 +49,9 @@ steps to reproduce each one.
 
 ## Promo tile (440×280)
 
-- Brand mark + wordmark on the `#12151c` background, using the emerald
-  `#6fd3a3` accent. Suggested text: "Preview links before you click."
-- Source art: `assets/logo.svg`, `assets/icon.svg`.
+Already generated at `store/promo/promo-440x280.png` (mark + "LinkScope" wordmark
++ "Preview links before you click." on the dark tile). A 1280×640 social/OG image
+is at `store/promo/social-1280x640.png`.
 
 ## After capturing
 
