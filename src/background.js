@@ -1,19 +1,28 @@
 // LinkScope — background service worker (Manifest V3)
 //
-// Two jobs:
+// Jobs:
 //   1. Observe extension-originated network requests to reconstruct redirect chains.
 //   2. On request, fetch a target URL and return capped, sanitizable HTML + the chain.
+//   3. On request, capture a screenshot of a target URL in an offscreen tab
+//      (used when the HTML has no previewable content, e.g. heavy SPAs).
 //
 // Security notes:
 //   - We only ever fetch user-visible http(s) URLs, with credentials omitted.
 //   - The returned HTML is NEVER executed here; the content script sanitizes it
 //     and drops it into a fully sandboxed iframe (no scripts, opaque origin).
+//   - Screenshots are taken in a temporary, background window that is always
+//     closed again; no listener or storage is left behind.
 
 const EXT_ORIGIN = chrome.runtime.getURL('');
 
 const FETCH_TIMEOUT_MS = 9000;
 const MAX_BODY_BYTES = 900 * 1024; // cap raw HTML we shuttle to the page
 const MAX_TRACKED_REQUESTS = 64;
+
+const SHOT_WINDOW_WIDTH = 1000;
+const SHOT_WINDOW_HEIGHT = 720;
+const SHOT_LOAD_TIMEOUT_MS = 12000;
+const SHOT_SETTLE_MS = 900; // let fonts/paint settle after load
 
 /** @type {Map<number, RequestRecord>} */
 const chains = new Map();
@@ -251,12 +260,126 @@ async function handlePreview(rawUrl) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Screenshot capture
+// ---------------------------------------------------------------------------
+//
+// For client-rendered pages the fetched HTML is an empty shell, so a camera
+// roll of the real page is more useful than the source. We open the URL in a
+// small, unfocused window, wait for it to settle, capture the visible tab, and
+// always tear the window down again.
+//
+// Notes / limits:
+//   - captureVisibleTab captures the *active* tab of a window, so the tab must
+//     be focused. We use a separate window to avoid disturbing the user's.
+//   - The captured image includes whatever the page actually rendered, so it
+//     reflects the anonymous (cookie-less) view only if the window is isolated.
+//     Chrome shares the profile session, so logged-in sites may look signed in.
+
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function captureScreenshot(rawUrl) {
+  const url = normalizeUrl(rawUrl);
+  if (!url) return { ok: false, error: 'Unsupported URL scheme.' };
+
+  let win = null;
+  let tabId = null;
+  try {
+    win = await chrome.windows.create({
+      url,
+      type: 'popup',
+      focused: false,
+      state: 'normal',
+      width: SHOT_WINDOW_WIDTH,
+      height: SHOT_WINDOW_HEIGHT,
+      top: 0,
+      left: 0,
+    });
+    if (!win || !win.tabs || !win.tabs.length) {
+      throw new Error('Could not open a capture window.');
+    }
+    tabId = win.tabs[0].id;
+    const windowId = win.id;
+
+    // Wait for the tab to finish loading.
+    const loaded = await waitForTabComplete(tabId, SHOT_LOAD_TIMEOUT_MS);
+    if (!loaded) {
+      // Still capture: partial pages beat nothing.
+    }
+    await sleep(SHOT_SETTLE_MS);
+
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+      format: 'png',
+    });
+
+    return {
+      ok: true,
+      dataUrl,
+      finalUrl: win.tabs[0].url || url,
+      capturedAt: Date.now(),
+    };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  } finally {
+    // Always clean up, regardless of outcome.
+    try {
+      if (win && win.id != null) await chrome.windows.remove(win.id);
+      else if (tabId != null) await chrome.tabs.remove(tabId);
+    } catch {
+      /* window may already be gone */
+    }
+  }
+}
+
+function waitForTabComplete(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+      clearTimeout(timer);
+      resolve(result);
+    };
+
+    const onUpdated = (id, info) => {
+      if (id === tabId && info.status === 'complete') finish(true);
+    };
+    const onRemoved = (id) => {
+      if (id === tabId) finish(false);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.onRemoved.addListener(onRemoved);
+
+    // It may already be complete before we attached the listener.
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError) {
+        finish(false);
+        return;
+      }
+      if (tab && tab.status === 'complete') finish(true);
+    });
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'LPS_PREVIEW') {
     handlePreview(message.url)
       .then(sendResponse)
       .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
     return true; // keep the message channel open for the async response
+  }
+  if (message?.type === 'LPS_SCREENSHOT') {
+    captureScreenshot(message.url)
+      .then(sendResponse)
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
+    return true;
   }
   return false;
 });

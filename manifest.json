@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "LinkScope",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Hover a link to preview it in a sandboxed, script-free frame and inspect the redirect chain before you click.",
   "minimum_chrome_version": "114",
-  "permissions": ["storage", "webRequest"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["storage", "webRequest", "tabs"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "src/background.js",
     "type": "module"

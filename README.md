@@ -19,11 +19,28 @@ script-free frame, and see the redirect chain before you click.**
 - **Summary-card fallback** — if the page's real content is JavaScript-rendered
   (X, many SPAs), a card built from its OpenGraph metadata is shown instead of a
   blank frame.
+- **Screenshot fallback** — if there is neither renderable HTML nor metadata, the
+  page is loaded in a temporary background tab, photographed, and the tab is
+  closed. Shows how a JS-heavy page actually looks.
+- **Bot-wall detection** — Cloudflare-style "Just a moment…" interstitials are
+  recognised and explained instead of appearing as a blank frame.
 - **Two trigger modes** — plain `hover` (default) with a configurable delay, or
   `Shift + hover` if you prefer an explicit modifier.
 - **No credentials for the preview fetch** — the sandbox fetch uses
   `credentials: 'omit'`, so it never pulls your logged-in session into the preview.
 - **Zero build step** — plain JS/CSS, load it unpacked.
+
+## How a link is rendered
+
+LinkScope picks the best available representation, in order:
+
+| Condition | What you see |
+| --- | --- |
+| Page has readable HTML | Sandboxed `iframe` (blob URL, scripts disabled) |
+| Cloudflare / bot wall | "Blocked by a bot check" explanation |
+| JS-rendered, has OpenGraph tags | Summary card (title, description, image) |
+| JS-rendered, no metadata | Screenshot captured in a background tab |
+| Contains a sign-in form | Frame + `PREVIEW` badge + sandbox warning |
 
 ## Install (unpacked)
 
@@ -66,10 +83,25 @@ assets/
   icon.svg        simplified mark source (128x128)
   icon-16/32/48/128.png  toolbar + store icons
 src/
-  background.js   service worker: webRequest chain capture + capped HTML fetch
+  background.js   service worker: webRequest chain capture, capped HTML fetch,
+                  background-tab screenshot capture
   content.js      hover detection, shadow-DOM overlay, sanitizer, sandboxed iframe
   popup.html/js   settings UI (chrome.storage.sync)
 ```
+
+## Permissions
+
+| Permission | Why |
+| --- | --- |
+| `storage` | remember settings |
+| `webRequest` | observe own requests to reconstruct redirect chains |
+| `tabs` | open and close the temporary screenshot tab |
+| `<all_urls>` (host) | fetch a hovered link on any site |
+
+`<all_urls>` is required because `chrome.tabs.captureVisibleTab` (the screenshot
+fallback) rejects `http://*/*` / `https://*/*` grants and refuses `activeTab`
+(which only applies to a user-invoked tab, not a background one). The extension
+never reads page content beyond the single URL you hover.
 
 ## Branding
 

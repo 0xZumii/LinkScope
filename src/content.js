@@ -24,7 +24,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.3.2+blob';
+  const BUILD = 'v0.4.0+shot';
 
   let settings = { ...DEFAULTS };
   try {
@@ -354,16 +354,10 @@
       return;
     }
 
-    // Little content and no metadata: explain instead of showing an empty frame.
+    // Little content and no metadata: the page is almost certainly
+    // client-rendered. Offer a screenshot of how it actually looks.
     if (readable < MIN_READABLE) {
-      body.append(
-        el('div', { class: 'placeholder' }, 'No previewable content'),
-        note(
-          result.status
-            ? `The server returned HTTP ${result.status} with very little readable content. It may block automated requests.`
-            : 'The server returned very little readable content. It may require JavaScript or block automated requests.',
-        ),
-      );
+      renderScreenshotFallback(finalUrl, result.status);
       return;
     }
 
@@ -697,6 +691,50 @@
     body.append(card, note(reason));
   }
 
+  // Ask the background worker to photograph the page in a temporary tab.
+  // Used when the fetched HTML has no previewable content (client-rendered SPAs).
+  async function renderScreenshotFallback(finalUrl, status) {
+    const body = q('#lps-body');
+    body.replaceChildren();
+
+    const loading = el('div', { class: 'shot-wrap' });
+    loading.append(el('div', { class: 'placeholder' }, 'Capturing a screenshot…'));
+    body.append(loading, note('This page is rendered by JavaScript, so LinkScope is loading it in a background tab to photograph it.'));
+
+    let shot;
+    try {
+      shot = await chrome.runtime.sendMessage({ type: 'LPS_SCREENSHOT', url: finalUrl });
+    } catch (err) {
+      shot = { ok: false, error: String(err?.message || err) };
+    }
+
+    // The panel may have been closed or reused while we were capturing.
+    if (!panel || q('#lps-body') !== body) return;
+
+    body.replaceChildren();
+
+    if (!shot || !shot.ok || !shot.dataUrl) {
+      body.append(
+        el('div', { class: 'placeholder' }, 'No previewable content'),
+        note(
+          shot?.error
+            ? `Could not capture a screenshot: ${shot.error}`
+            : `The server returned ${status ? `HTTP ${status}` : 'no usable content'} and the page could not be captured.`,
+        ),
+      );
+      return;
+    }
+
+    const wrap = el('div', { class: 'shot-wrap' });
+    const img = document.createElement('img');
+    img.className = 'shot-img';
+    img.src = shot.dataUrl;
+    img.alt = 'Screenshot of the linked page';
+    wrap.append(img);
+    wrap.append(el('div', { class: 'frame-badge' }, 'Screenshot'));
+    body.append(wrap, note('Captured in a background tab and then closed. This is how the page looks, not a live view.'));
+  }
+
   // --- formatting ----------------------------------------------------------
   function prettyUrl(url) {
     try {
@@ -943,6 +981,14 @@
     .body-section { padding-bottom: 10px; }
     .body { height: 320px; max-height: 46vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
     .frame-wrap { position: relative; height: 300px; }
+    .shot-wrap {
+      position: relative;
+      height: 300px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0c0f15;
+    }
+    .shot-img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top center; }
     .preview-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
     /* Makes clear the frame is a sandboxed snapshot, not the live page. */
     .frame-badge {
