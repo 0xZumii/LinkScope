@@ -24,7 +24,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.3.0+blob';
+  const BUILD = 'v0.3.1+blob';
 
   let settings = { ...DEFAULTS };
   try {
@@ -323,15 +323,41 @@
     const readable = readableLength(sanitized);
     const meta = extractMeta(result.html, finalUrl);
 
-    // Client-rendered pages (X, many SPAs) return an empty shell whose real
-    // content only exists as OpenGraph metadata. A frame of that shell looks
-    // blank, so show a metadata card instead when there's little readable text.
+    // Bot-challenge / block pages (Cloudflare "Just a moment...", similar) return
+    // a 4xx with no useful content and no OpenGraph tags. Surface that clearly
+    // rather than rendering a blank frame or an empty card.
+    const challenge = detectChallenge(result, sanitized);
+    if (challenge) {
+      body.append(
+        el('div', { class: 'placeholder' }, challenge.title),
+        note(challenge.detail),
+      );
+      return;
+    }
+
+    // Client-rendered pages (X, many SPAs) serve an empty shell whose real
+    // content only exists as OpenGraph metadata. Show a metadata card instead of
+    // a blank frame — but only when there is actually metadata to show.
     const MIN_READABLE = 200;
-    if (readable < MIN_READABLE && (meta.title || meta.description)) {
+    const hasMeta = Boolean(meta.title || meta.description || meta.image);
+    if (readable < MIN_READABLE && hasMeta) {
       renderMetaCard(
         meta,
         finalUrl,
         'This page renders its content with JavaScript, which is disabled in the preview. Showing its summary instead.',
+      );
+      return;
+    }
+
+    // Little content and no metadata: explain instead of showing an empty frame.
+    if (readable < MIN_READABLE) {
+      body.append(
+        el('div', { class: 'placeholder' }, 'No previewable content'),
+        note(
+          result.status
+            ? `The server returned HTTP ${result.status} with very little readable content. It may block automated requests.`
+            : 'The server returned very little readable content. It may require JavaScript or block automated requests.',
+        ),
       );
       return;
     }
@@ -554,6 +580,52 @@
     meta.title = meta.title.slice(0, 200);
     meta.description = meta.description.slice(0, 400);
     return meta;
+  }
+
+  // Identify interstitial bot-challenge / block pages. These return 4xx with a
+  // short, script-driven page and no useful metadata, so they would otherwise
+  // render as a blank frame or an empty card.
+  function detectChallenge(result, sanitizedHtml) {
+    const status = result.status || 0;
+    const text = (() => {
+      try {
+        const doc = new DOMParser().parseFromString(sanitizedHtml, 'text/html');
+        return (doc.body?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      } catch {
+        return '';
+      }
+    })();
+    const raw = (result.html || '').toLowerCase();
+
+    const cloudflare =
+      text.includes('just a moment') ||
+      text.includes('enable javascript and cookies to continue') ||
+      text.includes('checking your browser') ||
+      raw.includes('cdn-cgi/challenge-platform') ||
+      raw.includes('__cf_chl');
+
+    const otherBotWall =
+      status === 403 &&
+      (text.includes('attention required') ||
+        text.includes('access denied') ||
+        text.includes('request blocked') ||
+        text.includes('verify you are human'));
+
+    if (cloudflare) {
+      return {
+        title: 'Blocked by a bot check',
+        detail:
+          'This site is behind a Cloudflare-style challenge ("Just a moment…"). The preview cannot run the JavaScript that would clear it, so there is nothing to render. Opening the link in a tab will work normally.',
+      };
+    }
+    if (otherBotWall) {
+      return {
+        title: `Blocked (HTTP ${status})`,
+        detail:
+          'The site refused the automated request. It may block non-browser traffic or require a login. Opening the link directly will usually work.',
+      };
+    }
+    return null;
   }
 
   // Rough measure of how much readable content the sanitized page has. Used to
