@@ -21,19 +21,43 @@
     fetchPreview: true,
   };
 
+  // Bump this whenever the content script changes. It is shown in the panel
+  // header so it's obvious which build a tab is actually running — content
+  // scripts only update when the extension and the page are both reloaded.
+  const BUILD = 'v0.3.0+blob';
+
   let settings = { ...DEFAULTS };
   try {
-    chrome.storage.sync.get(DEFAULTS, (stored) => {
-      settings = { ...DEFAULTS, ...stored };
-    });
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') return;
-      for (const [key, change] of Object.entries(changes)) {
-        settings[key] = change.newValue;
-      }
-    });
+    if (isContextAlive()) {
+      chrome.storage.sync.get(DEFAULTS, (stored) => {
+        if (!isContextAlive()) return;
+        settings = { ...DEFAULTS, ...stored };
+      });
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'sync') return;
+        for (const [key, change] of Object.entries(changes)) {
+          settings[key] = change.newValue;
+        }
+      });
+    }
   } catch {
     /* storage unavailable — run with defaults */
+  }
+
+  // --- extension-context guard ---------------------------------------------
+  // After the extension is reloaded/updated, content scripts already running in
+  // open tabs lose their `chrome.runtime` binding. Detect that so we can show a
+  // clear message instead of a raw "cannot read sendMessage" error.
+  function isContextAlive() {
+    try {
+      return Boolean(chrome && chrome.runtime && chrome.runtime.id);
+    } catch {
+      return false;
+    }
+  }
+
+  function contextLostMessage() {
+    return 'This page is running an older copy of LinkScope and its connection to the extension was closed. Reload the page to reconnect.';
   }
 
   // --- state ---------------------------------------------------------------
@@ -46,6 +70,7 @@
   let hideTimer = null;
   let requestToken = 0;
   const pointer = { x: 0, y: 0 };
+
 
   // --- link detection ------------------------------------------------------
   function resolveLink(target) {
@@ -177,11 +202,19 @@
     const token = ++requestToken;
     setState('loading', url);
 
+    if (!isContextAlive()) {
+      renderResult({ ok: false, error: contextLostMessage() }, url);
+      return;
+    }
+
     let result;
     try {
       result = await chrome.runtime.sendMessage({ type: 'LPS_PREVIEW', url });
     } catch (err) {
-      result = { ok: false, error: String(err?.message || err) };
+      const message = isContextAlive()
+        ? String(err?.message || err)
+        : contextLostMessage();
+      result = { ok: false, error: message };
     }
     if (token !== requestToken || !panel) return; // a newer request won
     renderResult(result, url);
@@ -671,7 +704,7 @@
       </div>
     </div>
     <div class="section">
-      <div class="section-label">Redirect chain</div>
+      <div class="section-label">Redirect chain <span class="build" title="Content-script build">${BUILD}</span></div>
       <div class="chain" id="lps-chain"></div>
     </div>
     <div class="section body-section">
@@ -758,6 +791,13 @@
       text-transform: uppercase;
       color: #6d7789;
       margin-bottom: 6px;
+    }
+    .build {
+      float: right;
+      font-size: 9px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: #4c5669;
     }
     .chain { display: flex; flex-direction: column; gap: 3px; max-height: 132px; overflow: auto; }
     .hop { display: flex; align-items: center; gap: 7px; font-size: 12px; }
