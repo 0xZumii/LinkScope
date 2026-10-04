@@ -19,16 +19,16 @@
     mode: 'delay', // 'delay' (plain hover) | 'shift' (Shift + hover)
     delayMs: 500,
     fetchPreview: true,
-    // Screenshotting a JS app means loading it for real in a temporary tab,
-    // with scripts enabled and the browser's session. Gate it so users can opt
-    // out of that live load; the fetch-based paths never touch credentials.
-    allowScreenshots: true,
+    // Screenshotting a JS app means loading it for real in a temporary tab.
+    // 'isolated' (default) tries an Incognito window first so the page loads
+    // logged-out; 'normal' uses a regular window; false disables the path.
+    allowScreenshots: 'isolated',
   };
 
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.6.0+live';
+  const BUILD = 'v0.7.0+incog';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -454,11 +454,11 @@
     }
 
     if (mode === 'shot') {
-      if (!settings.allowScreenshots) {
+      if (settings.allowScreenshots === false) {
         body.append(
           el('div', { class: 'placeholder' }, 'No renderable preview'),
           note(
-            'This page needs JavaScript. Live screenshots are turned off in settings — turn on "Load pages for screenshots" to photograph it. That opens the link for real in a temporary tab, with scripts enabled and using your browser session.',
+            'This page needs JavaScript. Live screenshots are turned off in settings — turn on "Load pages for screenshots" to photograph it. That opens the link for real in a temporary tab, with scripts enabled.',
           ),
         );
         return;
@@ -828,17 +828,16 @@
 
     const loading = el('div', { class: 'shot-wrap' });
     loading.append(el('div', { class: 'placeholder' }, 'Capturing a screenshot…'));
-    body.append(
-      loading,
-      note('This page is rendered by JavaScript, so LinkScope is opening it for real in a temporary tab (scripts enabled, using your browser session) to photograph it.'),
-    );
+    body.append(loading, note('This page is rendered by JavaScript, so LinkScope is loading it in a temporary tab to photograph it…'));
+
+    const mode = settings.allowScreenshots === 'normal' ? 'normal' : 'isolated';
 
     // Cover the whole capture (plus a short tail) against the focus-change
     // events described on captureGraceUntil.
     captureGraceUntil = Date.now() + 20000;
     let shot;
     try {
-      shot = await chrome.runtime.sendMessage({ type: 'LPS_SCREENSHOT', url: finalUrl });
+      shot = await sendCapture(finalUrl, mode);
     } catch (err) {
       shot = { ok: false, error: String(err?.message || err) };
     } finally {
@@ -853,11 +852,7 @@
     if (!shot || !shot.ok || !shot.dataUrl) {
       body.append(
         el('div', { class: 'placeholder' }, 'No previewable content'),
-        note(
-          shot?.error
-            ? `Could not capture a screenshot: ${shot.error}`
-            : `The server returned ${status ? `HTTP ${status}` : 'no usable content'} and the page could not be captured.`,
-        ),
+        note(screenshotFailureNote(shot, status, mode)),
       );
       return;
     }
@@ -869,10 +864,34 @@
     img.alt = 'Screenshot of the linked page';
     wrap.append(img);
     wrap.append(el('div', { class: 'frame-badge' }, 'Screenshot'));
-    body.append(wrap, note('Captured from a temporary tab that loaded the page live — scripts ran and your browser session was used — then closed. This is a still image, not an interactive view.'));
+    body.append(
+      wrap,
+      note(
+        mode === 'isolated'
+          ? 'Loaded in a temporary Incognito tab — logged out, so the page could not see your session — then closed. This is a still image, not an interactive view.'
+          : 'Loaded in a temporary tab with your browser session, then closed. This is a still image, not an interactive view.',
+      ),
+    );
 
     // Only now that the capture worked do we cache "screenshot" for this host.
     rememberMode(memoryKey(shot.finalUrl || finalUrl), 'shot');
+  }
+
+  // A capture is "isolated" when it ran in an Incognito window we opened. If it
+  // failed with "incognito-not-allowed", report that distinctly so the user
+  // knows the fix is a one-time Chrome setting, not a broken page.
+  async function sendCapture(url, mode) {
+    const isolate = mode === 'isolated';
+    const res = await chrome.runtime.sendMessage({ type: 'LPS_SCREENSHOT', url, isolate });
+    return res || { ok: false, error: 'No response from the background worker.' };
+  }
+
+  function screenshotFailureNote(shot, status, mode) {
+    if (shot?.error === 'incognito-not-allowed') {
+      return 'Incognito is not enabled for LinkScope. Turn on “Allow in Incognito” for the extension in chrome://extensions to keep screenshots logged-out — or switch “Load pages for screenshots” to “Normal tab” in settings to allow them with your session.';
+    }
+    if (shot?.error) return `Could not capture a screenshot: ${shot.error}`;
+    return `The server returned ${status ? `HTTP ${status}` : 'no usable content'} and the page could not be captured.`;
   }
 
   // --- formatting ----------------------------------------------------------

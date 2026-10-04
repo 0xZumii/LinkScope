@@ -14,9 +14,9 @@ in full below.
 - **Per-site render memory** is stored in `chrome.storage.local` on your device.
 - The frame/card preview is fetched **directly by your browser without
   credentials** (`credentials: 'omit'`).
-- The **screenshot fallback is the exception**: it loads the page for real in a
-  temporary tab, using scripts and your browser session, then closes it. It can
-  be turned off with **Load pages for screenshots**.
+- The **screenshot fallback is the exception**: it loads the page for real. By
+  default it uses a temporary **Incognito** tab (logged out, memory-only
+  cookies); it can be set to a normal tab or turned off.
 
 ## What LinkScope processes, and where
 
@@ -24,9 +24,9 @@ in full below.
 | --- | --- | --- |
 | The URL you hover | Fetch the page to build the preview and redirect chain | Your browser → the destination site. Nothing is sent to the developer. |
 | The destination's HTML | Sanitized and rendered in a sandboxed frame | Stays in your browser; discarded when the preview closes |
-| Settings (enabled, trigger, delay, render preview, allow screenshots) | Remember your preferences | `chrome.storage.sync` |
+| Settings (enabled, trigger, delay, render preview, live screenshots) | Remember your preferences | `chrome.storage.sync` |
 | Per-site render memory (host + first path segment → card/screenshot, timestamp) | Render known sites consistently | `chrome.storage.local` (capped at 500 entries; clearable) |
-| The page as rendered live (screenshot fallback only) | Photograph a JavaScript-only page | Loaded in a temporary tab with your session; the still image stays in your browser and is discarded when the preview closes |
+| The page as rendered live (screenshot fallback only) | Photograph a JavaScript-only page | Loaded in a temporary tab (Incognito by default) and closed; the still image stays in your browser and is discarded when the preview closes |
 
 LinkScope does not read or transmit the content of pages you visit beyond the
 single link you explicitly hover.
@@ -39,13 +39,22 @@ Because credentials are omitted, the request never carries your cookies, and the
 destination cannot tie the fetch-based preview to a logged-in session.
 
 For JavaScript-only pages with no previewable HTML or metadata, LinkScope can
-instead open the URL **live** in a temporary, non-incognito tab, wait for it to
-render, capture a screenshot, and close the tab. That path uses your normal
-profile, so the page runs its scripts with your cookies/session — exactly as if
-you had opened it yourself — and may set cookies, fire analytics, or register
-service workers. You can disable this path entirely with **Load pages for
-screenshots**; JS-only pages will then show a "no renderable preview"
-explanation instead.
+instead load the URL **live** in a temporary tab, wait for it to render, capture
+a screenshot, and close the tab. The **Live screenshots** setting controls this:
+
+- **Isolated (default)** — the tab is created in an **Incognito** window, which
+  has a fresh, memory-only cookie store, so the page starts **logged out** and
+  cannot use your session. Incognito isolation requires the user to enable
+  **Allow in Incognito** for the extension; if it is not enabled, LinkScope does
+  not silently fall back to your session — it shows a "no renderable preview"
+  note instead.
+- **Normal tab** — the page is loaded in a temporary tab using your normal
+  profile. It runs with your session, exactly as if you had opened it.
+- **Off** — the page is never loaded live; JS-only pages show a note.
+
+In all cases the tab is closed immediately after capture. Even in isolated mode
+the page's scripts run, so it can set *incognito* cookies and fire anonymous
+analytics; it cannot read your logged-in accounts.
 
 ## Permissions and why each is needed
 

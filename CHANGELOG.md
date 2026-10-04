@@ -5,6 +5,22 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-10-04
+
+### Added
+
+- **Isolated screenshots (default).** The screenshot fallback now loads a page in
+  a temporary **Incognito** window, which has a fresh, memory-only cookie store,
+  so it starts logged out and cannot use your session. Requires "Allow in
+  Incognito" for the extension; if that's off, LinkScope says so rather than
+  silently falling back to your session.
+
+### Changed
+
+- The "Load pages for screenshots" on/off toggle is now a **Live screenshots**
+  choice: **Isolated** (Incognito, default), **Normal tab** (uses your session),
+  or **Off**.
+
 ## [0.6.0] - 2026-10-04
 
 ### Added

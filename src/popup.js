@@ -5,7 +5,7 @@ const DEFAULTS = {
   mode: 'delay',
   delayMs: 500,
   fetchPreview: true,
-  allowScreenshots: true,
+  allowScreenshots: 'isolated', // 'isolated' | 'normal' | false
 };
 
 const RENDER_MEMORY_KEY = 'renderMemory';
@@ -28,7 +28,7 @@ function apply(settings) {
   els.delayMs.value = settings.delayMs;
   els.delayValue.textContent = settings.delayMs;
   els.fetchPreview.checked = settings.fetchPreview;
-  els.allowScreenshots.checked = settings.allowScreenshots;
+  els.allowScreenshots.value = settings.allowScreenshots === 'normal' ? 'normal' : 'isolated';
 }
 
 function renderMemoryCount() {
@@ -48,7 +48,7 @@ renderMemoryCount();
 els.enabled.addEventListener('change', () => save({ enabled: els.enabled.checked }));
 els.mode.addEventListener('change', () => save({ mode: els.mode.value }));
 els.fetchPreview.addEventListener('change', () => save({ fetchPreview: els.fetchPreview.checked }));
-els.allowScreenshots.addEventListener('change', () => save({ allowScreenshots: els.allowScreenshots.checked }));
+els.allowScreenshots.addEventListener('change', () => save({ allowScreenshots: els.allowScreenshots.value }));
 els.delayMs.addEventListener('input', () => {
   els.delayValue.textContent = els.delayMs.value;
   save({ delayMs: Number(els.delayMs.value) });

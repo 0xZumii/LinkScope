@@ -43,8 +43,9 @@ WHAT YOU GET
 • Summary-card fallback — if a page is JavaScript-rendered (X, many SPAs), its
   OpenGraph title, description and image are shown instead of a blank frame.
 • Screenshot fallback — pages with neither usable HTML nor metadata are loaded
-  live in a temporary tab, photographed, and the tab closed. This is the one path
-  that runs the page's scripts; it can be turned off in settings.
+  live in a temporary tab and photographed. By default that is an Incognito tab
+  (fresh, memory-only cookies, so it loads logged out); it can be set to a normal
+  tab or turned off.
 • Bot-wall detection — Cloudflare-style "Just a moment…" pages are recognised and
   explained instead of appearing blank.
 • Per-site memory — LinkScope remembers whether a site needed a summary card or a
@@ -56,10 +57,10 @@ PRIVATE BY DESIGN
 • The frame/card preview fetch uses credentials: 'omit' — your logged-in session
   is never pulled into it, and scripts are disabled in an opaque-origin sandbox.
 • Referrers are suppressed on the preview frame.
-• The screenshot fallback is the exception: because a script-free sandbox cannot
-  render a JS app, it loads the page in a temporary tab with scripts and your
-  browser session, then closes it. Disable it with "Load pages for screenshots"
-  if you don't want that.
+• The screenshot fallback is the exception: a script-free sandbox cannot render a
+  JS app, so it loads the page. By default it does so in a temporary Incognito
+  tab (logged out, memory-only cookies). Choose "Normal tab" to use your session,
+  or "Off" to disable the path entirely.
 • Nothing is sent to the developer. There are no analytics, no accounts, and no
   remote servers. Settings and per-site memory stay in your browser.
 • No build step, no third-party libraries: the whole extension is plain
@@ -77,7 +78,8 @@ PERMISSIONS, AND WHY
 Only http(s) links get a preview, only the single URL you hover is fetched, and
 the result is discarded when the preview closes.
 
-New in 0.6.0: an opt-out for the live-load screenshot fallback.
+New in 0.7.0: screenshot fallback loads pages in an isolated Incognito tab by
+default, so previewing a JS page no longer uses your session.
 ```
 
 ## Support / contact

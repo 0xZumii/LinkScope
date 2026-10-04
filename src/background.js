@@ -281,9 +281,22 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function captureScreenshot(rawUrl) {
+async function captureScreenshot(rawUrl, isolate = true) {
   const url = normalizeUrl(rawUrl);
   if (!url) return { ok: false, error: 'Unsupported URL scheme.' };
+
+  // An Incognito window gives the page a fresh, memory-only cookie store, so it
+  // loads logged-out and can't act as the user. It requires the user to have
+  // granted "Allow in Incognito" for the extension.
+  if (isolate) {
+    let allowed = false;
+    try {
+      allowed = await chrome.extension.isAllowedIncognitoAccess();
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) return { ok: false, error: 'incognito-not-allowed' };
+  }
 
   let win = null;
   let tabId = null;
@@ -302,6 +315,7 @@ async function captureScreenshot(rawUrl) {
     win = await chrome.windows.create({
       url,
       type: 'popup',
+      incognito: Boolean(isolate),
       focused: false,
       state: 'normal',
       width: SHOT_WINDOW_WIDTH,
@@ -415,7 +429,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true; // keep the message channel open for the async response
   }
   if (message?.type === 'LPS_SCREENSHOT') {
-    captureScreenshot(message.url)
+    captureScreenshot(message.url, message.isolate !== false)
       .then(sendResponse)
       .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
     return true;

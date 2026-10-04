@@ -20,9 +20,9 @@ script-free frame, and see the redirect chain before you click.**
   (X, many SPAs), a card built from its OpenGraph metadata is shown instead of a
   blank frame.
 - **Screenshot fallback** — if there is neither renderable HTML nor metadata, the
-  page is loaded **for real** in a temporary tab (scripts enabled, your browser
-  session), photographed, and the tab closed. Shows how a JS-heavy page actually
-  looks; can be turned off (see Privacy).
+  page is loaded in a temporary tab and photographed. By default this is an
+  **Incognito** tab (logged out, fresh memory-only cookies); it can be set to a
+  normal tab or turned off.
 - **Per-site memory** — remembers whether a host needed a summary card or a
   screenshot, so a known site renders the same way instead of being re-guessed
   on every hover. Clearable from the popup.
@@ -52,10 +52,11 @@ there is real content to show, and only then per-site memory:
 3. **Summary card.** A client-rendered shell (X, many SPAs) has little readable
    HTML but usually carries OpenGraph tags. Those become a title + description +
    image card rather than a blank frame.
-4. **Screenshot.** A shell with no usable metadata is loaded **live** in a
-   temporary tab — scripts enabled, your browser session — then photographed and
-   closed. This is the only path that runs the page's JavaScript; it can be
-   disabled (see Privacy).
+4. **Screenshot.** A shell with no usable metadata is loaded live in a temporary
+   tab and photographed. This is the only path that runs the page's JavaScript,
+   so it is configurable (see Privacy): **Isolated** (default) loads it in a
+   temporary **Incognito** window so it starts logged out; **Normal tab** uses
+   your session; **Off** disables it entirely.
 
 ### Privacy: the fetch paths vs. the screenshot path
 
@@ -63,14 +64,24 @@ The frame and card paths never use your credentials: the background worker
 fetches the HTML with `credentials: 'omit'`, and everything is rendered with
 scripts disabled. Those paths cannot act as you.
 
-The screenshot path is different by necessity. A script-free sandbox cannot
-render a JavaScript app, so to photograph one LinkScope opens it in a temporary,
-non-incognito tab using your normal profile. That means the page runs its
-scripts **with your cookies/session**, exactly as if you had opened it yourself.
-It can therefore set cookies, fire analytics, register service workers, and it
-adds a history entry. The tab is closed immediately after capture, and the panel
-says so. If you don't want that, turn off **Load pages for screenshots** in the
-popup — JS-only pages then show a "no renderable preview" explanation instead.
+The screenshot path is different by necessity — a script-free sandbox cannot
+render a JavaScript app, so one has to be loaded for real. The **Live
+screenshots** setting controls how:
+
+| Setting | What it does | Session used? |
+| --- | --- | --- |
+| **Isolated** (default) | Loads the page in a temporary **Incognito** window, which has a fresh, memory-only cookie store, so it starts **logged out**; captures and closes it | No |
+| **Normal tab** | Loads the page in a temporary tab using your normal profile | Yes |
+| **Off** | Never loads the page; JS-only pages show a "no renderable preview" note | — |
+
+In Incognito mode the page's scripts still run, but without your cookies, so it
+cannot act as you or read your accounts. It can still set *incognito* cookies
+and fire anonymous analytics, and the tab is closed immediately after capture.
+Incognito isolation requires a one-time permission: open `chrome://extensions`,
+find LinkScope → **Details**, and enable **Allow in Incognito**. If that's off,
+LinkScope reports it and falls back to showing the "no renderable preview" note
+rather than silently using your session — switch to **Normal tab** if you'd
+rather allow it with your session.
 
 ### Why a `blob:` URL instead of `srcdoc`
 
@@ -117,7 +128,7 @@ Click the toolbar icon to configure:
 | Trigger | Hover | or "Shift + hover" |
 | Hover delay | 500 ms | how long the pointer must rest on a link |
 | Render page preview | on | turn off to only show link + redirects |
-| Load pages for screenshots | on | allow the live-tab screenshot fallback (uses your session) |
+| Live screenshots | Isolated | Incognito temp tab (logged out) / Normal tab (uses your session) / off |
 | Remembered sites | — | count of learned hosts; **Clear** forgets them |
 
 ## How the redirect chain is captured
@@ -203,7 +214,7 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
 | Clickjacking through the preview | `pointer-events:none` on links inside the frame |
 | Huge/streaming responses | body read is capped (~900 KB) |
 | Hanging requests | 9 s `AbortController` timeout |
-| **Screenshot path runs the page live** | temporary tab, closed immediately; **disable with "Load pages for screenshots"** (it does use your session) |
+| **Screenshot path runs the page live** | temporary tab, closed immediately; **Isolated** default loads it in Incognito (logged out); "Off" disables it |
 
 ### Known limitations
 
@@ -215,9 +226,10 @@ used to generate the PNG icons (a complex mark turns to mush at 16px).
   empty shell, LinkScope falls back to a metadata card or a live-tab screenshot
   instead of showing a blank frame.
 - **Screenshots load the page for real.** Because a script-free sandbox can't
-  render a JS app, the screenshot fallback opens the link in a temporary tab with
-  scripts and your session. Disable it with **Load pages for screenshots** if you
-  don't want that.
+  render a JS app, the screenshot fallback loads the link. The default is an
+  Incognito tab (logged out); **Normal tab** uses your session; **Off** disables
+  the path. Incognito isolation needs "Allow in Incognito" enabled for the
+  extension.
 - Sites that require login render as a login page (by design — no credentials).
 - `webRequest` is observational only in MV3; that is all this extension needs.
 
