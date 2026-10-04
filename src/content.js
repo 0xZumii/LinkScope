@@ -18,7 +18,6 @@
     enabled: true,
     mode: 'delay', // 'delay' (plain hover) | 'shift' (Shift + hover)
     delayMs: 500,
-    autoHide: false, // legacy: previews are windows now; only kept so old settings load
     fetchPreview: true,
     // Screenshotting a JS app means loading it for real in a temporary tab.
     // 'isolated' (default) tries an Incognito window first so the page loads
@@ -246,10 +245,6 @@
       if (settings.mode === 'delay' && now?.href !== link.href) return;
       openPreview(link);
     }, wait);
-  }
-
-  function cancelPending() {
-    clearTimeout(hoverTimer);
   }
 
   // --- preview request -----------------------------------------------------

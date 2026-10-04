@@ -46,8 +46,9 @@ The target's HTML is fetched by the background worker and sanitized, then one of
 there is real content to show, and only then per-site memory:
 
 1. **Bot-wall notice.** A Cloudflare-style interstitial ("Just a moment…", an
-   otherwise empty 4xx shell) is recognised and explained instead of being shown
-   as a blank frame.
+   otherwise empty 4xx shell) or an HTML "not found" page (a soft 404, common on
+   link shorteners) is recognised and explained instead of being shown as a blank
+   frame.
 2. **Sandboxed frame.** If the page has readable HTML — or looks like a sign-in
    page — its content renders in an `<iframe sandbox="">` with scripts, forms and
    frames disabled. Login pages always frame, so the sandbox warning is visible;
@@ -61,14 +62,9 @@ there is real content to show, and only then per-site memory:
    temporary **Incognito** window so it starts logged out; **Normal tab** uses
    your session; **Off** disables it entirely.
 
-### The preview window
-
-The preview opens centered in the viewport as a floating window (920px wide, or
-as large as the viewport allows). Once open it stays put: moving the pointer away
-**does not** close it, and neither does scrolling. It opens once and then stays
-where it is, so hovering a second link loads its preview into the same window at
-the same spot. Drag it anywhere by its header. Close it with the **✕** button or
-**Esc**.
+A JavaScript *app shell* — an empty `<body>` with scripts, even if it carries
+some header/footer boilerplate — is treated as "no content" and goes to the
+card/screenshot path rather than being framed.
 
 ### The preview window
 
@@ -200,7 +196,7 @@ src/
 fallback) rejects `http://*/*` / `https://*/*` grants and refuses `activeTab`
 (which only applies to a user-invoked tab, not a background one). Besides the
 single URL you hover, the extension only opens that URL live for the screenshot
-fallback when **Load pages for screenshots** is enabled.
+fallback (see the **Live screenshots** setting).
 
 ## Chrome Web Store
 
