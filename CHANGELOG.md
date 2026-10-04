@@ -5,6 +5,15 @@ All notable changes to LinkScope are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-10-04
+
+### Fixed
+
+- The preview panel closed a moment after a screenshot finished. Focusing the
+  temporary capture window (needed on Windows) makes the page receive a synthetic
+  pointer/scroll event, which tripped the auto-hide. Auto-hide is now suspended
+  while a capture is in flight and for a short grace period afterwards.
+
 ## [0.5.2] - 2026-10-04
 
 ### Fixed

@@ -24,7 +24,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.5.2+shot';
+  const BUILD = 'v0.5.3+focus';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -136,6 +136,11 @@
   let hideTimer = null;
   let requestToken = 0;
   const pointer = { x: 0, y: 0 };
+  // While a screenshot is being captured, the worker may briefly focus a
+  // temporary window (required on Windows). That focus change can deliver a
+  // synthetic mousemove/scroll — often at (0,0) — which would otherwise hide
+  // the panel the moment the capture lands. Ignore auto-hide until this time.
+  let captureGraceUntil = 0;
 
 
   // --- link detection ------------------------------------------------------
@@ -207,6 +212,7 @@
   }
 
   function scheduleHide(ms) {
+    if (Date.now() < captureGraceUntil) return;
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
       if (!pinned) destroyOverlay();
@@ -811,11 +817,16 @@
     loading.append(el('div', { class: 'placeholder' }, 'Capturing a screenshot…'));
     body.append(loading, note('This page is rendered by JavaScript, so LinkScope is loading it in a background tab to photograph it.'));
 
+    // Cover the whole capture (plus a short tail) against the focus-change
+    // events described on captureGraceUntil.
+    captureGraceUntil = Date.now() + 20000;
     let shot;
     try {
       shot = await chrome.runtime.sendMessage({ type: 'LPS_SCREENSHOT', url: finalUrl });
     } catch (err) {
       shot = { ok: false, error: String(err?.message || err) };
+    } finally {
+      captureGraceUntil = Date.now() + 900;
     }
 
     // The panel may have been closed or reused while we were capturing.
@@ -882,6 +893,8 @@
   let lastHovered = null;
 
   function onPointerMove(e) {
+    // Drop synthetic events produced while a capture window takes/returns focus.
+    if (Date.now() < captureGraceUntil) return;
     pointer.x = e.clientX;
     pointer.y = e.clientY;
     if (!settings.enabled) return;
