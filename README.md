@@ -224,6 +224,8 @@ you commit. Palette:
 `assets/logo.svg` is the full mark; `assets/icon.svg` is the simplified version
 used to generate the PNG icons (a complex mark turns to mush at 16px).
 
+**Repository:** https://github.com/0xZumii/LinkScope
+
 ### Security model
 
 | Risk | Mitigation |
