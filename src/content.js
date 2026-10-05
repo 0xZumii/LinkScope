@@ -16,7 +16,7 @@
 
   const DEFAULTS = {
     enabled: true,
-    mode: 'delay', // 'delay' (plain hover) | 'shift' (Shift + hover)
+    mode: 'shift', // Shift + hover only; plain hover is intentionally not offered
     delayMs: 500,
     fetchPreview: true,
     // Screenshotting a JS app means loading it for real in a temporary tab.
@@ -31,7 +31,7 @@
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.10.0+rdap';
+  const BUILD = 'v0.10.1+shift';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -89,6 +89,9 @@
       chrome.storage.sync.get(DEFAULTS, (stored) => {
         if (!isContextAlive()) return;
         settings = { ...DEFAULTS, ...stored };
+        // Plain-hover mode was removed; existing installs that had it selected
+        // are migrated to Shift + hover so they don't keep auto-opening.
+        if (settings.mode !== 'shift') settings.mode = 'shift';
       });
       chrome.storage.local.get({ [RENDER_MEMORY_KEY]: {}, renderMemoryVersion: 0 }, (stored) => {
         if (!isContextAlive()) return;
@@ -142,6 +145,10 @@
   let requestToken = 0;
   let domainToken = 0;
   const pointer = { x: 0, y: 0 };
+  // Authoritative Shift state. `e.shiftKey` on mousemove can go stale on pages
+  // that swallow key events (Pinterest, some SPAs), which made shift-mode open
+  // previews on plain hover. We track keydown/keyup ourselves instead.
+  let shiftHeld = false;
   // While a screenshot is being captured, the worker may briefly focus a
   // temporary window (required on Windows). That focus change can deliver a
   // synthetic mousemove/scroll — often at (0,0) — which we ignore briefly.
@@ -246,7 +253,11 @@
       if (!link.el.isConnected) return;
       // The pointer may have moved off while we waited.
       const now = linkAtPoint(pointer.x, pointer.y);
-      if (settings.mode === 'delay' && now?.href !== link.href) return;
+      if (now?.href !== link.href) return;
+      // In shift mode, Shift must still be held when the timer fires. Otherwise
+      // a key-up during the wait (or a stale modifier state) opens a preview the
+      // user never asked for.
+      if (settings.mode === 'shift' && !shiftHeld) return;
       openPreview(link);
     }, wait);
   }
@@ -1277,7 +1288,7 @@
     if (link.el === activeLink?.el) return;
 
     if (settings.mode === 'shift') {
-      if (!e.shiftKey) return; // wait for Shift
+      if (!shiftHeld) return; // wait for Shift
       schedulePreview(link);
       return;
     }
@@ -1322,6 +1333,18 @@
     window.removeEventListener('pointermove', onDragMove, true);
     window.removeEventListener('pointerup', endDrag, true);
   }
+
+  // Track Shift ourselves rather than trusting e.shiftKey on mousemove.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift') shiftHeld = true;
+  }, true);
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') shiftHeld = false;
+  }, true);
+  // If the window loses focus, assume the modifier was released.
+  window.addEventListener('blur', () => {
+    shiftHeld = false;
+  });
 
   // Holding Shift while already hovering a link should open it immediately.
   document.addEventListener('keydown', (e) => {

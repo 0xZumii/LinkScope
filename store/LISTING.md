@@ -11,7 +11,7 @@ LinkScope — Link Preview & Redirect Inspector
 ## Summary / short description (max 132)
 
 ```
-Hover a link to preview it in a sandboxed, script-free frame and see every redirect before you click.
+Shift + hover a link to preview it in a sandboxed, script-free frame and see every redirect before you click.
 ```
 
 ## Category
@@ -28,7 +28,7 @@ English.
 ```
 LinkScope shows you where a link actually goes — before you click it.
 
-Hover any link for half a second. LinkScope fetches the destination, renders its
+Hold Shift and hover any link. LinkScope fetches the destination, renders its
 HTML in a sandboxed, script-free frame, and lists the full redirect chain with the
 HTTP status of every hop. Shorteners, tracking redirects, and silent hops to a
 different domain are called out so you can decide whether a link is safe to open.
@@ -50,7 +50,11 @@ WHAT YOU GET
   explained instead of appearing blank.
 • Per-site memory — LinkScope remembers whether a site needed a summary card or a
   screenshot, so known sites render the same way next time. Clear it any time.
-• Two trigger modes — hover (with a configurable delay) or Shift + hover.
+• Shift + hover — previews open only when you hold Shift, so they never pop up
+  while you're reading or scrolling.
+• Domain info (optional) — registrar, registration age and Certificate
+  Transparency subdomains via RDAP, plus a built-in look-alike (homograph) guard
+  that flags punycode and mixed-script hostnames.
 
 PRIVATE BY DESIGN
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Repository: https://github.com/0xZumii/LinkScope
 
+## [0.10.1] - 2026-10-05
+
+### Changed
+
+- **Removed plain "on hover" as a trigger.** Previews now open only with
+  **Shift + hover**; the Trigger dropdown and the (now meaningless) hover-delay
+  slider are gone from the popup. Existing installs that had plain hover
+  selected are migrated to Shift + hover.
+
+### Fixed
+
+- Shift mode could still open previews on plain hover on some sites (e.g.
+  Pinterest). Two causes: `e.shiftKey` on `mousemove` can go stale when a page
+  swallows key events, and the open timer didn't re-check the modifier when it
+  fired. Shift state is now tracked from `keydown`/`keyup` (cleared on window
+  blur) and re-verified inside the timer.
+
 ## [0.10.0] - 2026-10-05
 
 ### Added

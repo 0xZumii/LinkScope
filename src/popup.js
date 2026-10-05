@@ -2,7 +2,7 @@
 
 const DEFAULTS = {
   enabled: true,
-  mode: 'delay',
+  mode: 'shift',
   delayMs: 500,
   fetchPreview: true,
   allowScreenshots: 'isolated', // 'isolated' | 'normal' | false
@@ -13,9 +13,6 @@ const RENDER_MEMORY_KEY = 'renderMemory';
 
 const els = {
   enabled: document.getElementById('enabled'),
-  mode: document.getElementById('mode'),
-  delayMs: document.getElementById('delayMs'),
-  delayValue: document.getElementById('delayValue'),
   fetchPreview: document.getElementById('fetchPreview'),
   allowScreenshots: document.getElementById('allowScreenshots'),
   showDomainInfo: document.getElementById('showDomainInfo'),
@@ -26,9 +23,6 @@ const els = {
 
 function apply(settings) {
   els.enabled.checked = settings.enabled;
-  els.mode.value = settings.mode;
-  els.delayMs.value = settings.delayMs;
-  els.delayValue.textContent = settings.delayMs;
   els.fetchPreview.checked = settings.fetchPreview;
   els.allowScreenshots.value = settings.allowScreenshots === 'normal' ? 'normal' : 'isolated';
   els.showDomainInfo.checked = settings.showDomainInfo;
@@ -49,14 +43,9 @@ chrome.storage.sync.get(DEFAULTS, (stored) => apply({ ...DEFAULTS, ...stored }))
 renderMemoryCount();
 
 els.enabled.addEventListener('change', () => save({ enabled: els.enabled.checked }));
-els.mode.addEventListener('change', () => save({ mode: els.mode.value }));
 els.fetchPreview.addEventListener('change', () => save({ fetchPreview: els.fetchPreview.checked }));
 els.allowScreenshots.addEventListener('change', () => save({ allowScreenshots: els.allowScreenshots.value }));
 els.showDomainInfo.addEventListener('change', () => save({ showDomainInfo: els.showDomainInfo.checked }));
-els.delayMs.addEventListener('input', () => {
-  els.delayValue.textContent = els.delayMs.value;
-  save({ delayMs: Number(els.delayMs.value) });
-});
 els.reset.addEventListener('click', (e) => {
   e.preventDefault();
   save(DEFAULTS);

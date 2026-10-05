@@ -15,12 +15,19 @@ reproduce each one.
   → 1280×800), or crop to it after. Chrome's screenshot tools:
   `Ctrl+Shift+P` → "Capture screenshot" / "Capture full size screenshot".
 
-## Shot 1 — Hover preview on a real page (hero image)
+## Shot 1 — Preview on a real page (hero image)
 
 - Open a content-rich article (e.g. a news/blog post with text and images).
-- Hover a link until the overlay appears: sandboxed frame + `Preview` badge +
-  redirect chain beneath.
+- Hold **Shift** and hover a link until the overlay appears: sandboxed frame +
+  `Preview` badge + redirect chain beneath.
 - Goal: show the frame, the badge, and the chain in one image.
+
+## Shot 1b — Look-alike warning (optional, strong)
+
+- Hover a punycode link (e.g. one whose tooltip shows `xn--…`) with Domain info
+  on.
+- Goal: show the "⚠ Possible spoof" badge and the alert explaining the decoded
+  hostname.
 
 ## Shot 2 — Redirect chain with a cross-origin hop
 

@@ -1,7 +1,7 @@
 # LinkScope
 
-A Manifest V3 Chrome extension: **hover a link to preview it in a sandboxed,
-script-free frame, and see the redirect chain before you click.**
+A Manifest V3 Chrome extension: **hold Shift and hover a link to preview it in a
+sandboxed, script-free frame, and see the redirect chain before you click.**
 
 <p align="center">
   <img src="assets/logo.svg" width="128" height="128" alt="LinkScope logo" />
@@ -28,8 +28,8 @@ script-free frame, and see the redirect chain before you click.**
   on every hover. Clearable from the popup.
 - **Bot-wall detection** — Cloudflare-style "Just a moment…" interstitials are
   recognised and explained instead of appearing as a blank frame.
-- **Two trigger modes** — plain `hover` (default) with a configurable delay, or
-  `Shift + hover` if you prefer an explicit modifier.
+- **Shift + hover** — previews open only when you hold Shift and hover a link, so
+  they never pop up while you're just reading or scrolling.
 - **A floating preview window** — the overlay opens near the link, is draggable by
   its header, and stays put while you scroll or read. Close it with the **✕** or
   **Esc**.
@@ -178,7 +178,7 @@ capped at 500 entries (oldest evicted first), and can be cleared from the popup.
 1. Open `chrome://extensions`.
 2. Enable **Developer mode** (top right).
 3. Click **Load unpacked** and select this `link-preview-sandbox` folder.
-4. Open any `http(s)` page and hover a link for half a second.
+4. Open any `http(s)` page, hold **Shift**, and hover a link.
 
 ## Settings
 
@@ -187,8 +187,7 @@ Click the toolbar icon to configure:
 | Setting | Default | Notes |
 | --- | --- | --- |
 | Enabled | on | Master toggle |
-| Trigger | Hover | or "Shift + hover" |
-| Hover delay | 500 ms | how long the pointer must rest on a link |
+| Trigger | Shift + hover | previews only open while Shift is held |
 | Render page preview | on | turn off to only show link + redirects |
 | Live screenshots | Isolated | Incognito temp tab (logged out) / Normal tab (uses your session) / off |
 | Domain info | off | RDAP registrar/dates + CT subdomains for the hovered domain |
