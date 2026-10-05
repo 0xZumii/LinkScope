@@ -23,12 +23,15 @@
     // 'isolated' (default) tries an Incognito window first so the page loads
     // logged-out; 'normal' uses a regular window; false disables the path.
     allowScreenshots: 'isolated',
+    // Opt-in: query RDAP (registrar/dates) and Certificate Transparency
+    // (subdomains) for the hovered link's registrable domain.
+    showDomainInfo: false,
   };
 
   // Bump this whenever the content script changes. It is shown in the panel
   // header so it's obvious which build a tab is actually running — content
   // scripts only update when the extension and the page are both reloaded.
-  const BUILD = 'v0.9.1+logo';
+  const BUILD = 'v0.10.0+rdap';
 
   const RENDER_MEMORY_KEY = 'renderMemory';
   const RENDER_MEMORY_VERSION = 3; // bumped when the key format/meaning changes
@@ -137,6 +140,7 @@
   let activeLink = null;
   let hoverTimer = null;
   let requestToken = 0;
+  let domainToken = 0;
   const pointer = { x: 0, y: 0 };
   // While a screenshot is being captured, the worker may briefly focus a
   // temporary window (required on Windows). That focus change can deliver a
@@ -293,6 +297,9 @@
       q('#lps-title').textContent = 'Loading preview…';
       q('#lps-final').textContent = '';
       q('#lps-chain').replaceChildren(chainRow('Fetching redirects…'));
+      domainToken += 1;
+      q('#lps-domain').replaceChildren();
+      q('#lps-domain-section').setAttribute('hidden', '');
       q('#lps-body').replaceChildren();
       q('#lps-body').append(el('div', { class: 'placeholder' }, 'Resolving…'));
       q('#lps-open').href = url;
@@ -312,9 +319,15 @@
     q('#lps-final').title = finalUrl;
     q('#lps-open').href = finalUrl;
 
+    // Homograph / IDN guard (local, always runs).
+    const homograph = analyzeHostname(finalUrl ? safeHostname(finalUrl) : '');
+
     // Verdict badge
     const verdict = q('#lps-verdict');
-    if (!ok) {
+    if (homograph.risky) {
+      verdict.textContent = '⚠ Possible spoof';
+      verdict.className = 'verdict bad';
+    } else if (!ok) {
       verdict.textContent = result?.error || 'Failed';
       verdict.className = 'verdict bad';
     } else if (redirected) {
@@ -331,8 +344,255 @@
     // Redirect chain
     renderChain(result?.chain, requestedUrl, finalUrl, ok);
 
+    // Domain info (RDAP + CT) — also shows the homograph warning.
+    renderDomain(finalUrl, homograph);
+
     // Body
     renderBody(result, requestedUrl, ok);
+  }
+
+  function safeHostname(url) {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return '';
+    }
+  }
+
+  // --- domain info (RDAP + CT) ---------------------------------------------
+  function renderDomain(finalUrl, homograph) {
+    const section = q('#lps-domain-section');
+    const container = q('#lps-domain');
+    if (!section || !container) return;
+
+    // The homograph warning is local and always shown, even when the RDAP
+    // lookup is disabled — a spoof warning shouldn't depend on an opt-in.
+    const wantLookup = settings.showDomainInfo;
+    if (!wantLookup && !homograph?.risky) {
+      section.setAttribute('hidden', '');
+      container.replaceChildren();
+      return;
+    }
+
+    const hostname = safeHostname(finalUrl);
+    section.removeAttribute('hidden');
+    container.replaceChildren();
+
+    if (homograph?.risky) {
+      const alert = el('div', { class: 'alert' });
+      alert.append(el('div', { class: 'alert-title' }, '⚠ Look-alike domain'));
+      alert.append(el('div', { class: 'alert-body' }, homograph.reason));
+      container.append(alert);
+    }
+
+    if (!wantLookup) return;
+
+    if (!hostname || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname === 'localhost') {
+      return;
+    }
+
+    const pending = chainRow('Looking up registrar and certificates…');
+    container.append(pending);
+
+    const token = ++domainToken;
+    chrome.runtime
+      .sendMessage({ type: 'LPS_DOMAIN', hostname })
+      .then((res) => {
+        if (token !== domainToken || !panel) return;
+        pending.remove();
+        renderDomainResult(container, hostname, res);
+      })
+      .catch((err) => {
+        if (token !== domainToken || !panel) return;
+        pending.remove();
+        container.append(chainRow('Domain lookup failed: ' + String(err?.message || err)));
+      });
+  }
+
+  function renderDomainResult(container, hostname, res) {
+    if (!res || !res.ok) {
+      container.append(
+        chainRow(res?.domain ? `${res.domain} — ${res.error || 'no RDAP record.'}` : res?.error || 'Lookup failed.'),
+      );
+      return;
+    }
+
+    const rows = [];
+    if (res.registrar) rows.push(['Registrar', res.registrar]);
+    const created = parseDate(res.created);
+    if (created) {
+      const ageDays = Math.floor((Date.now() - created.getTime()) / 86400000);
+      const ageText = formatAge(ageDays);
+      const isNew = res.newDomainDays && ageDays < res.newDomainDays;
+      rows.push(['Created', `${created.toISOString().slice(0, 10)} · ${ageText}`, isNew ? 'warn' : null]);
+    }
+    const expires = parseDate(res.expires);
+    if (expires) rows.push(['Expires', expires.toISOString().slice(0, 10)]);
+    if (res.nameservers?.length) {
+      const shared = sharedNs(res.nameservers);
+      rows.push(['Nameservers', (shared || res.nameservers.join(', ')).slice(0, 80), shared ? 'muted' : null]);
+    }
+    if (res.ct && res.ct.count) {
+      const sample = res.ct.sample.filter((n) => n !== res.domain).slice(0, 3).join(', ');
+      rows.push(['CT hosts', `${res.ct.count} seen${sample ? ` · ${sample}` : ''}`]);
+    }
+
+    for (const [label, value, cls] of rows) {
+      const row = el('div', { class: 'kv' + (cls ? ' ' + cls : '') });
+      row.append(el('span', { class: 'kv-k' }, label), el('span', { class: 'kv-v' }, value));
+      container.append(row);
+    }
+    if (!rows.length) container.append(chainRow('No registrar data returned.'));
+  }
+
+  function parseDate(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // --- homograph / IDN guard (purely local) --------------------------------
+  // Detects the two shapes of "looks like a trusted name but isn't":
+  //   1. punycode hostname (xn--…) that decodes to non-ASCII lookalikes
+  //   2. mixed-script labels ("a" Latin + Cyrillic) or confusable characters
+  // No blocklist, no network — just Unicode ranges and a small confusables map.
+
+  // Characters commonly used to imitate Latin letters.
+  const CONFUSABLES = {
+    а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', х: 'x', у: 'y',
+    ѕ: 's', і: 'i', ј: 'j', ӏ: 'l',
+    А: 'A', Е: 'E', О: 'O', Р: 'P', С: 'C', Х: 'X',
+    α: 'a', ο: 'o', ρ: 'p', ν: 'v', Α: 'A', Β: 'B', Ε: 'E', Ο: 'O', Ρ: 'P',
+    ᴀ: 'a', ᴇ: 'e', ᴏ: 'o', ɩ: 'i', ⅰ: 'i', ⅼ: 'l', ⅾ: 'd',
+  };
+
+  function scriptOf(ch) {
+    const code = ch.codePointAt(0);
+    if (code < 0x80) return 'latin';
+    if (code >= 0x0400 && code <= 0x04ff) return 'cyrillic';
+    if (code >= 0x0370 && code <= 0x03ff) return 'greek';
+    if (code >= 0x0530 && code <= 0x058f) return 'armenian';
+    if (code >= 0xff00 && code <= 0xffef) return 'fullwidth';
+    return 'other';
+  }
+
+  // Returns { risky, reason } for a hostname, or { risky: false }.
+  function analyzeHostname(hostname) {
+    if (!hostname) return { risky: false };
+    const labels = hostname.split('.');
+
+    // 1. Punycode: decode and inspect.
+    for (const label of labels) {
+      if (!/^xn--/i.test(label)) continue;
+      let decoded;
+      try {
+        decoded = punycodeDecode(label.slice(4));
+      } catch {
+        return { risky: true, reason: 'Malformed punycode hostname.' };
+      }
+      const mapped = [...decoded].map((ch) => CONFUSABLES[ch] || ch).join('');
+      if (mapped !== decoded && /[a-z]/i.test(mapped)) {
+        return {
+          risky: true,
+          reason: `Non-Latin hostname that looks like “${mapped}”.`,
+        };
+      }
+      return { risky: true, reason: 'Hostname uses punycode (IDN).' };
+    }
+
+    // 2. Mixed scripts within a label (never legitimate for a hostname).
+    for (const label of labels) {
+      const scripts = new Set();
+      for (const ch of label) {
+        const s = scriptOf(ch);
+        if (s === 'latin' || s === 'cyrillic' || s === 'greek' || s === 'armenian' || s === 'fullwidth') {
+          scripts.add(s);
+        }
+      }
+      if (scripts.size > 1) {
+        return { risky: true, reason: 'Label mixes Latin with look-alike characters.' };
+      }
+    }
+    return { risky: false };
+  }
+
+  // Minimal punycode decoder (RFC 3492) — we only need to read the characters.
+  function punycodeDecode(input) {
+    const base = 36;
+    const tmin = 1;
+    const tmax = 26;
+    const skew = 38;
+    const damp = 700;
+    const initialBias = 72;
+    const initialN = 128;
+    const delimiter = '-';
+
+    let output = [];
+    let i = 0;
+    let n = initialN;
+    let bias = initialBias;
+
+    let basic = input.lastIndexOf(delimiter);
+    if (basic < 0) basic = 0;
+    for (let j = 0; j < basic; j++) {
+      if (input.charCodeAt(j) >= 0x80) throw new Error('bad input');
+      output.push(input[j]);
+    }
+    let index = basic > 0 ? basic + 1 : 0;
+
+    const digit = (cp) => {
+      if (cp >= 0x30 && cp <= 0x39) return cp - 0x30 + 26;
+      if (cp >= 0x41 && cp <= 0x5a) return cp - 0x41;
+      if (cp >= 0x61 && cp <= 0x7a) return cp - 0x61;
+      return base;
+    };
+    const adapt = (delta, numPoints, firstTime) => {
+      delta = firstTime ? Math.floor(delta / damp) : delta >> 1;
+      delta += Math.floor(delta / numPoints);
+      let k = 0;
+      while (delta > ((base - tmin) * tmax) >> 1) {
+        delta = Math.floor(delta / (base - tmin));
+        k += base;
+      }
+      return k + Math.floor(((base - tmin + 1) * delta) / (delta + skew));
+    };
+
+    while (index < input.length) {
+      let oldi = i;
+      let w = 1;
+      for (let k = base; ; k += base) {
+        if (index >= input.length) throw new Error('bad input');
+        const c = input.charCodeAt(index++);
+        const d = digit(c);
+        if (d >= base) throw new Error('bad input');
+        i += d * w;
+        const t = k <= bias ? tmin : k >= bias + tmax ? tmax : k - bias;
+        if (d < t) break;
+        w *= base - t;
+      }
+      const len = output.length + 1;
+      bias = adapt(i - oldi, len, oldi === 0);
+      n += Math.floor(i / len);
+      i %= len;
+      output.splice(i++, 0, String.fromCodePoint(n));
+    }
+    return output.join('');
+  }
+
+  function formatAge(days) {
+    if (days < 0) return 'not yet registered';
+    if (days < 31) return `${days} day${days === 1 ? '' : 's'} old`;
+    if (days < 365) return `${Math.floor(days / 30)} months old`;
+    const years = (days / 365).toFixed(days < 365 * 10 ? 1 : 0);
+    return `${years} years old`;
+  }
+
+  // Collapse nameservers to a shared provider when they all sit under one.
+  function sharedNs(list) {
+    const hosts = list.map((n) => n.toLowerCase());
+    const suffix = (h) => h.split('.').slice(-2).join('.');
+    const first = suffix(hosts[0]);
+    return hosts.every((h) => suffix(h) === first) ? `all under *.${first}` : null;
   }
 
   function renderChain(chain, requestedUrl, finalUrl, ok) {
@@ -1103,6 +1363,10 @@
       <div class="section-label">Redirect chain <span class="build" title="Content-script build">${BUILD}</span></div>
       <div class="chain" id="lps-chain"></div>
     </div>
+    <div class="section" id="lps-domain-section" hidden>
+      <div class="section-label">Domain</div>
+      <div class="domain" id="lps-domain"></div>
+    </div>
     <div class="section body-section">
       <div class="section-label">Sandboxed preview</div>
       <div class="body" id="lps-body"></div>
@@ -1238,6 +1502,21 @@
       color: #f0c15c;
     }
     .hop-tag.bad { background: #3a1c1c; color: #f08c8c; }
+    .domain { display: flex; flex-direction: column; gap: 3px; max-height: 132px; overflow: auto; }
+    .kv { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+    .kv-k { flex: none; width: 82px; color: #6d7789; font-size: 11px; }
+    .kv-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cbd4e4; }
+    .kv.warn .kv-v { color: #f0c15c; }
+    .kv.muted .kv-v { color: #8b96ab; }
+    .alert {
+      border: 1px solid #5a2b2b;
+      background: #2a1414;
+      border-radius: 7px;
+      padding: 7px 9px;
+      margin-bottom: 5px;
+    }
+    .alert-title { font-size: 12.5px; font-weight: 600; color: #f08c8c; }
+    .alert-body { font-size: 12px; color: #e0b4b4; margin-top: 2px; word-break: break-word; }
     .body-section { padding-bottom: 10px; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
     .body { flex: 1 1 auto; min-height: 0; height: 440px; max-height: 62vh; overflow: auto; border-radius: 8px; background: #0c0f15; }
     .frame-wrap { position: relative; height: 100%; min-height: 300px; }

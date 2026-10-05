@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Repository: https://github.com/0xZumii/LinkScope
 
+## [0.10.0] - 2026-10-05
+
+### Added
+
+- **Domain info (opt-in)** in a new Domain section: registrar, creation/expiry
+  dates and age, nameservers, and a Certificate-Transparency subdomain count.
+  Fresh domains (< 90 days) are flagged. Lookups run in the background worker
+  (so a page's CSP can't block them), use `credentials: 'omit'`, and are cached
+  per domain for an hour. CT is best-effort with an 8s timeout.
+- **Look-alike (homograph) guard**, always on and purely local: flags punycode
+  hostnames that decode to non-Latin look-alikes and labels that mix Latin with
+  Cyrillic/Greek/etc. Shows a "⚠ Possible spoof" badge in the header and an
+  alert in the Domain section.
+- New host permissions `rdap.org` and `crt.sh` for the opt-in lookup.
+
 ## [0.9.1] - 2026-10-04
 
 ### Changed

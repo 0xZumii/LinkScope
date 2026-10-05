@@ -37,7 +37,48 @@ script-free frame, and see the redirect chain before you click.**
   `credentials: 'omit'`, so they never pull your logged-in session into the
   preview. The screenshot path is the exception (it loads the page live) and is
   documented below.
+- **Domain info (opt-in)** — registrar, creation date/age and nameservers from
+  **RDAP**, plus a subdomain count from **Certificate Transparency**.
+- **Look-alike domain guard** — flags punycode/IDN and mixed-script hostnames
+  (e.g. a Cyrillic `а` in `аpple.com`). Purely local; no blocklist.
 - **Zero build step** — plain JS/CSS, load it unpacked.
+
+## Domain info & look-alike guard
+
+Two domain-security features sit in the **Domain** section of the preview panel.
+
+### Look-alike (homograph) guard — always on, purely local
+
+This runs on every preview and never makes a network call. It flags:
+
+- **Punycode hostnames** (`xn--…`) that decode to non-Latin look-alikes — e.g.
+  `xn--pple-43d.com` → `аpple.com` (Cyrillic `а`).
+- **Mixed-script labels** — a label that mixes Latin with Cyrillic/Greek/etc.,
+  e.g. `pаypal.com`.
+
+When it fires, the header badge turns into **⚠ Possible spoof** and the panel
+explains what the hostname really is. There is no blocklist to maintain: it's a
+small Unicode-range check plus a confusables map.
+
+### Domain info — opt-in
+
+When **Domain info** is enabled in the popup, LinkScope queries:
+
+| Field | Source |
+| --- | --- |
+| Registrar | RDAP (`rdap.org`) |
+| Created / Expires / age | RDAP |
+| Nameservers (shared provider) | RDAP |
+| Subdomain count + samples | Certificate Transparency (`crt.sh`) |
+
+Freshness is called out: a domain registered within the last 90 days is flagged
+"new domain". Lookups go through the background worker (a page's CSP would block
+them from the content script), use `credentials: 'omit'`, and are cached per
+domain for an hour. CT is best-effort with a hard 8s timeout — if it's slow or
+down, RDAP data still shows.
+
+Both features are **off unless you enable Domain info**, except the homograph
+guard, which always runs because a spoof warning shouldn't depend on an opt-in.
 
 ## How a link is rendered
 
@@ -150,6 +191,7 @@ Click the toolbar icon to configure:
 | Hover delay | 500 ms | how long the pointer must rest on a link |
 | Render page preview | on | turn off to only show link + redirects |
 | Live screenshots | Isolated | Incognito temp tab (logged out) / Normal tab (uses your session) / off |
+| Domain info | off | RDAP registrar/dates + CT subdomains for the hovered domain |
 | Remembered sites | — | count of learned hosts; **Clear** forgets them |
 
 ## How the redirect chain is captured
@@ -191,6 +233,7 @@ src/
 | `webRequest` | observe own requests to reconstruct redirect chains |
 | `tabs` | open and close the temporary screenshot tab |
 | `<all_urls>` (host) | fetch a hovered link on any site |
+| `rdap.org`, `crt.sh` (host) | opt-in domain lookup: registrar/dates and CT subdomains |
 
 `<all_urls>` is required because `chrome.tabs.captureVisibleTab` (the screenshot
 fallback) rejects `http://*/*` / `https://*/*` grants and refuses `activeTab`

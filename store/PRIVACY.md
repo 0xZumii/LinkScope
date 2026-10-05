@@ -27,6 +27,7 @@ in full below.
 | Settings (enabled, trigger, delay, render preview, live screenshots) | Remember your preferences | `chrome.storage.sync` |
 | Per-site render memory (host + first path segment → card/screenshot, timestamp) | Render known sites consistently | `chrome.storage.local` (capped at 500 entries; clearable) |
 | The page as rendered live (screenshot fallback only) | Photograph a JavaScript-only page | Loaded in a temporary tab (Incognito by default) and closed; the still image stays in your browser and is discarded when the preview closes |
+| The hovered link's **registrable domain** (only if Domain info is enabled) | Look up registrar/dates (RDAP) and CT subdomains | Sent to `rdap.org` and `crt.sh`. Nothing is sent to the developer. |
 
 LinkScope does not read or transmit the content of pages you visit beyond the
 single link you explicitly hover.
@@ -37,6 +38,13 @@ When you hover a link, the background service worker issues one `fetch()` to tha
 URL with `credentials: 'omit'`, `redirect: 'follow'` and `cache: 'no-store'`.
 Because credentials are omitted, the request never carries your cookies, and the
 destination cannot tie the fetch-based preview to a logged-in session.
+
+If **Domain info** is enabled, LinkScope additionally sends the hovered link's
+**registrable domain** (e.g. `example.com`, not the full URL) to `rdap.org` and
+`crt.sh` to fetch registrar/registration data and Certificate Transparency
+subdomains. These requests also omit credentials and are cached locally for an
+hour. If Domain info is off, no such lookups happen. The look-alike (homograph)
+guard is purely local and sends nothing.
 
 For JavaScript-only pages with no previewable HTML or metadata, LinkScope can
 instead load the URL **live** in a temporary tab, wait for it to render, capture
@@ -68,6 +76,9 @@ analytics; it cannot read your logged-in accounts.
   the extension must be able to fetch it on any site. `captureVisibleTab` (used
   for the screenshot fallback) rejects narrower `http://*/*` grants and does not
   work with `activeTab`, which is why the broad host permission is required.
+- **`rdap.org` and `crt.sh`** — only used when the user enables **Domain info**,
+  to look up registrar/dates (RDAP) and Certificate Transparency subdomains for
+  the hovered link's registrable domain. These calls never carry credentials.
 
 ## Data sharing
 

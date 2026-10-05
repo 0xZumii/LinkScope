@@ -5,6 +5,7 @@
 //   2. On request, fetch a target URL and return capped, sanitizable HTML + the chain.
 //   3. On request, capture a screenshot of a target URL in an offscreen tab
 //      (used when the HTML has no previewable content, e.g. heavy SPAs).
+//   4. On request, look up a domain's RDAP record + CT subdomains (opt-in).
 //
 // Security notes:
 //   - We only ever fetch user-visible http(s) URLs, with credentials omitted.
@@ -421,6 +422,132 @@ function waitForTabComplete(tabId, timeoutMs) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Domain reconnaissance (RDAP + Certificate Transparency)
+// ---------------------------------------------------------------------------
+//
+// These run here, not in the content script: a page's CSP would block
+// third-party connect() calls from its context, and the content script has no
+// host access to rdap.org / crt.sh anyway. Everything is credentials:'omit',
+// and results are cached in-memory per domain for the worker's lifetime.
+
+const RDAP_TIMEOUT_MS = 8000;
+const CT_TIMEOUT_MS = 8000;
+const DOMAIN_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const NEW_DOMAIN_DAYS = 90;
+
+/** @type {Map<string, { at: number, data: object }>} */
+const domainCache = new Map();
+
+function baseDomain(hostname) {
+  // Good-enough eTLD+1 for the common cases; RDAP itself rejects deeper names.
+  const parts = String(hostname || '').toLowerCase().replace(/\.$/, '').split('.');
+  if (parts.length <= 2) return parts.join('.');
+  // Handle a few common two-label public suffixes.
+  const twoLevel = /^(co|com|org|net|gov|edu|ac)\.[a-z]{2}$/;
+  if (twoLevel.test(parts.slice(-2).join('.')) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
+
+function registrarName(entity) {
+  if (!entity) return '';
+  const v = entity.vcardArray && entity.vcardArray[1];
+  if (Array.isArray(v)) {
+    const fn = v.find((row) => row[0] === 'fn');
+    if (fn && fn[3]) return String(fn[3]);
+  }
+  return entity.handle ? String(entity.handle) : '';
+}
+
+async function fetchJson(url, timeoutMs, headers) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      redirect: 'follow',
+      credentials: 'omit',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: headers || {},
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function lookupRdap(domain) {
+  const j = await fetchJson(`https://rdap.org/domain/${encodeURIComponent(domain)}`, RDAP_TIMEOUT_MS, {
+    Accept: 'application/rdap+json',
+  });
+
+  const out = { registrar: '', created: null, expires: null, updated: null, status: [], nameservers: [] };
+
+  const registrar = (j.entities || []).find((e) => (e.roles || []).includes('registrar'));
+  out.registrar = registrarName(registrar);
+
+  for (const ev of j.events || []) {
+    if (ev.eventAction === 'registration') out.created = ev.eventDate || null;
+    else if (ev.eventAction === 'expiration') out.expires = ev.eventDate || null;
+    else if (ev.eventAction === 'last changed') out.updated = ev.eventDate || null;
+  }
+  out.status = Array.isArray(j.status) ? j.status : [];
+  out.nameservers = (j.nameservers || []).map((n) => n.ldhName).filter(Boolean);
+  return out;
+}
+
+async function lookupCt(domain) {
+  const rows = await fetchJson(
+    `https://crt.sh/?q=${encodeURIComponent('%.' + domain)}&output=json`,
+    CT_TIMEOUT_MS,
+    { Accept: 'application/json' },
+  );
+  const names = new Set();
+  if (Array.isArray(rows)) {
+    for (const r of rows) {
+      String(r.name_value || '')
+        .split('\n')
+        .forEach((n) => {
+          const name = n.trim().toLowerCase().replace(/^\*\./, '');
+          if (name && name.endsWith(domain)) names.add(name);
+        });
+    }
+  }
+  const list = [...names].sort();
+  return { count: list.length, sample: list.slice(0, 12) };
+}
+
+async function lookupDomain(hostname) {
+  const domain = baseDomain(hostname);
+  if (!domain || !domain.includes('.')) return { ok: false, error: 'Not a registrable domain.' };
+
+  const cached = domainCache.get(domain);
+  if (cached && Date.now() - cached.at < DOMAIN_CACHE_TTL_MS) {
+    return { ok: true, domain, cached: true, ...cached.data };
+  }
+
+  const [rdap, ct] = await Promise.allSettled([lookupRdap(domain), lookupCt(domain)]);
+
+  if (rdap.status !== 'fulfilled') {
+    // Without RDAP there is little to show; treat as a soft failure.
+    return {
+      ok: false,
+      domain,
+      error: String(rdap.reason?.message || rdap.reason || 'RDAP lookup failed.'),
+    };
+  }
+
+  const data = {
+    ...rdap.value,
+    ct: ct.status === 'fulfilled' ? ct.value : null,
+  };
+  domainCache.set(domain, { at: Date.now(), data });
+  return { ok: true, domain, cached: false, newDomainDays: NEW_DOMAIN_DAYS, ...data };
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'LPS_PREVIEW') {
     handlePreview(message.url)
@@ -430,6 +557,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message?.type === 'LPS_SCREENSHOT') {
     captureScreenshot(message.url, message.isolate !== false)
+      .then(sendResponse)
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
+    return true;
+  }
+  if (message?.type === 'LPS_DOMAIN') {
+    lookupDomain(message.hostname)
       .then(sendResponse)
       .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
     return true;

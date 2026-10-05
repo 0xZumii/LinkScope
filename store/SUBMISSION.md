@@ -50,6 +50,7 @@ The dashboard asks for each permission and a data-use declaration. Answers:
 | `webRequest` | Observe the extension's **own** preview fetches to reconstruct the redirect chain. Observational only; does not read or block normal browsing. |
 | `tabs` | Open a temporary tab to screenshot JavaScript-only pages, then close it. |
 | `<all_urls>` | A hovered link can point anywhere, so the preview fetch must work on any site. Also required by `captureVisibleTab` for the screenshot fallback. |
+| `rdap.org`, `crt.sh` | Only when the user enables **Domain info**: registrar/dates (RDAP) and Certificate Transparency subdomains for the hovered domain. Credentials omitted. |
 
 - [ ] Declare: no data sold, no data used for unrelated purposes, no remote code.
 - [ ] The extension does **not** collect or transmit user data to the developer.

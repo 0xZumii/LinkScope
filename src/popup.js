@@ -6,6 +6,7 @@ const DEFAULTS = {
   delayMs: 500,
   fetchPreview: true,
   allowScreenshots: 'isolated', // 'isolated' | 'normal' | false
+  showDomainInfo: false,
 };
 
 const RENDER_MEMORY_KEY = 'renderMemory';
@@ -17,6 +18,7 @@ const els = {
   delayValue: document.getElementById('delayValue'),
   fetchPreview: document.getElementById('fetchPreview'),
   allowScreenshots: document.getElementById('allowScreenshots'),
+  showDomainInfo: document.getElementById('showDomainInfo'),
   reset: document.getElementById('reset'),
   clearMemory: document.getElementById('clearMemory'),
   memoryCount: document.getElementById('memoryCount'),
@@ -29,6 +31,7 @@ function apply(settings) {
   els.delayValue.textContent = settings.delayMs;
   els.fetchPreview.checked = settings.fetchPreview;
   els.allowScreenshots.value = settings.allowScreenshots === 'normal' ? 'normal' : 'isolated';
+  els.showDomainInfo.checked = settings.showDomainInfo;
 }
 
 function renderMemoryCount() {
@@ -49,6 +52,7 @@ els.enabled.addEventListener('change', () => save({ enabled: els.enabled.checked
 els.mode.addEventListener('change', () => save({ mode: els.mode.value }));
 els.fetchPreview.addEventListener('change', () => save({ fetchPreview: els.fetchPreview.checked }));
 els.allowScreenshots.addEventListener('change', () => save({ allowScreenshots: els.allowScreenshots.value }));
+els.showDomainInfo.addEventListener('change', () => save({ showDomainInfo: els.showDomainInfo.checked }));
 els.delayMs.addEventListener('input', () => {
   els.delayValue.textContent = els.delayMs.value;
   save({ delayMs: Number(els.delayMs.value) });
